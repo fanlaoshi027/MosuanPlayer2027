@@ -71,14 +71,12 @@ protected:
         }
         setSliderPosition(valueAt(event->position().toPoint()));
         setSliderDown(true);
-        emit sliderMoved(sliderPosition());
         event->accept();
     }
     void mouseMoveEvent(QMouseEvent *event) override
     {
         if (isSliderDown()) {
             setSliderPosition(valueAt(event->position().toPoint()));
-            emit sliderMoved(sliderPosition());
             event->accept();
             return;
         }
