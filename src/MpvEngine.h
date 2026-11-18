@@ -14,6 +14,9 @@ public:
     bool loadFile(const QString &path, QString *errorMessage = nullptr);
     bool setPaused(bool paused);
     bool setSpeed(double speed);
+    bool setVolume(double volume);
+    bool seek(double seconds);
+    bool getDoubleProperty(const char *name, double *value) const;
     bool isReady() const noexcept { return m_handle != nullptr; }
 private:
     using CreateFn = void *(*)();
@@ -21,6 +24,7 @@ private:
     using InitializeFn = int (*)(void *);
     using CommandFn = int (*)(void *, const char **);
     using SetPropertyStringFn = int (*)(void *, const char *, const char *);
+    using GetPropertyFn = int (*)(void *, const char *, int, void *);
     using TerminateDestroyFn = void (*)(void *);
     QLibrary m_library;
     void *m_handle = nullptr;
@@ -29,6 +33,7 @@ private:
     InitializeFn m_initialize = nullptr;
     CommandFn m_command = nullptr;
     SetPropertyStringFn m_setPropertyString = nullptr;
+    GetPropertyFn m_getProperty = nullptr;
     TerminateDestroyFn m_terminateDestroy = nullptr;
     bool resolveApi(QString *errorMessage);
 };
