@@ -1,36 +1,33 @@
 # Folder-backed playlists and SMB behavior
 
 ## Product model
-There are exactly two independent folder-backed playlists, Playlist 1 and Playlist 2. Each stores one root folder path and its own scan snapshot, selected item, sort mode, and playback state. A separate Favorites collection stores folder shortcuts; favorites are not playlists.
+There are exactly two independent folder-backed playlists. Each stores one root folder path and its own persisted scan snapshot. A separate Favorites collection stores folder shortcuts; favorites are not playlists.
 
-## Refresh semantics (strict)
-- First open of a configured playlist: scan once.
-- Close/switch away, then open it again: scan once.
-- Explicit Refresh action: scan once.
-- No timer, polling loop, QFileSystemWatcher, SMB notification subscription, or scan triggered by playback.
-- While the playlist view remains open: retain the snapshot without background SMB refresh.
-- On network failure: retain prior snapshot and mark it unavailable/stale; never replace it with an empty list.
-- A successful scan replaces the snapshot atomically.
-- Opening the same playlist repeatedly while it is already active must not cause repeated scans.
-- Optional recursive scanning is configurable; default OFF.
-- Include supported video extensions only, configurable list.
-- Natural filename sort (2 before 10), deterministic case-insensitive primary comparison with stable tie-breaker.
-- Ignore temporary/partial files where practical (e.g. copy-in-progress); do not assume file size stability proves completion.
-- Manual Refresh button is always available.
+## SMB refresh semantics (strict)
+- At application startup, scan each configured SMB playlist exactly once.
+- Selecting a folder, switching playlist panels, opening/revisiting a playlist panel, and playback actions must not trigger a scan.
+- No timer, polling loop, QFileSystemWatcher, SMB notification subscription, or background SMB scan.
+- An explicit user click on **Manual Refresh** triggers exactly one scan.
+- Changing a playlist root folder only saves the path; it does not scan immediately. The user can manually refresh or restart the application.
+- On network failure, retain the last successful persisted snapshot and mark the path offline; never replace the snapshot with an empty list.
+- A successful enumeration atomically replaces the snapshot.
+- Folder favorites are shortcuts. Double-clicking a favorite assigns it to Playlist 1 without scanning; startup or Manual Refresh updates it.
+- Recursive scanning is OFF in v1.
+- Supported video extensions are filtered and filenames use natural numeric sorting (2 before 10).
+- SMB credentials are never stored by the application; Windows manages access credentials.
 
 ## Playback
-- Double-click or Enter opens selected media.
-- Sequential next/previous, repeat off / single / playlist.
-- Removing a file from the share while playing must not crash or interrupt decoder unexpectedly; report next-item behavior clearly.
-- Do not save SMB credentials. Use Windows integrated SMB access and user-provided Windows credentials.
-- Paths are UNC paths; no custom SMB protocol implementation in v1.
+- Double-click selects a media item; actual playback is implemented by the media-engine phase.
+- Sequential next/previous and repeat modes will operate on the current snapshot and must not rescan folders.
+- If a network file disappears during playback, report the playback error without automatically rescanning.
 
 ## Acceptance tests
-1. New SMB folder open -> exactly one scan.
+1. App startup with two configured SMB folders -> one scan per folder.
 2. Wait 30 minutes -> zero additional scans.
-3. Play/pause/seek/next -> zero directory scans except loading explicitly selected next file must not rescan.
-4. Close playlist and reopen -> exactly one new scan.
-5. Manual Refresh -> exactly one new scan.
-6. SMB unavailable -> prior snapshot remains visible and marked offline.
-7. Reconnect without reopen -> no implicit scan; manual Refresh or reopen updates it.
-8. Two playlists maintain independent paths and snapshots.
+3. Open/switch/revisit playlist panels -> zero scans.
+4. Play/pause/seek/next -> zero directory scans.
+5. Change a playlist folder -> zero immediate scans.
+6. Manual Refresh -> exactly one scan for that playlist.
+7. Restart application -> exactly one scan per configured playlist.
+8. SMB unavailable at startup/refresh -> previous persisted snapshot remains visible and path marked offline.
+9. Two playlists keep independent paths and snapshots.

@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include <QCollator>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -15,6 +16,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+
+#include <algorithm>
 
 namespace {
 const QStringList kVideoExtensions = {
@@ -43,6 +46,18 @@ QToolButton *iconButton(QStyle::StandardPixmap icon, const QString &tooltip, QWi
 bool isVideoFile(const QFileInfo &info)
 {
     return kVideoExtensions.contains(info.suffix().toLower());
+}
+
+void restoreSnapshot(QListWidget *list, const QStringList &snapshot)
+{
+    list->clear();
+    for (const QString &file : snapshot) {
+        auto *item = new QListWidgetItem(QFileInfo(file).fileName(), list);
+        item->setToolTip(file);
+        item->setData(Qt::UserRole, file);
+    }
+    if (list->count() == 0)
+        list->addItem(QStringLiteral("尚无扫描记录，请手动刷新"));
 }
 }
 
@@ -111,114 +126,141 @@ QWidget *MainWindow::createSidebar()
     brand->setObjectName(QStringLiteral("brand"));
     layout->addWidget(brand);
 
-    auto *openFolder = new QPushButton(QStringLiteral("＋ 添加文件夹播放列表"), sidebar);
-    layout->addWidget(openFolder);
+    auto makePlaylistPanel = [this, layout, sidebar](const QString &title, int index,
+                                                       QListWidget **outList) {
+        layout->addWidget(sectionTitle(title, sidebar));
 
-    auto makePlaylistPanel = [this, layout](const QString &title, int index, QListWidget **outList) {
-        layout->addWidget(sectionTitle(title, this));
-
-        auto *path = new QLabel(QStringLiteral("尚未指定文件夹"), this);
-        path->setObjectName(QStringLiteral("pathLabel"));
-        path->setWordWrap(true);
-        layout->addWidget(path);
+        auto *pathLabel = new QLabel(QStringLiteral("尚未指定文件夹"), sidebar);
+        pathLabel->setObjectName(QStringLiteral("pathLabel"));
+        pathLabel->setWordWrap(true);
+        layout->addWidget(pathLabel);
 
         auto *buttons = new QHBoxLayout;
-        auto *choose = new QPushButton(QStringLiteral("选择"), this);
-        auto *refresh = new QPushButton(QStringLiteral("打开/刷新"), this);
-        auto *favorite = new QPushButton(QStringLiteral("收藏"), this);
+        auto *choose = new QPushButton(QStringLiteral("选择文件夹"), sidebar);
+        auto *refresh = new QPushButton(QStringLiteral("手动刷新"), sidebar);
+        auto *favorite = new QPushButton(QStringLiteral("收藏"), sidebar);
         buttons->addWidget(choose);
         buttons->addWidget(refresh);
         buttons->addWidget(favorite);
         layout->addLayout(buttons);
 
-        auto *list = new QListWidget(this);
+        auto *list = new QListWidget(sidebar);
         list->setMinimumHeight(95);
         layout->addWidget(list, 1);
         *outList = list;
 
-        auto settingsKey = QStringLiteral("playlist%1/path").arg(index);
-        QSettings settings;
-        const QString savedPath = settings.value(settingsKey).toString();
-        if (!savedPath.isEmpty()) {
-            path->setText(savedPath);
+        if (index == 1) {
+            m_playlist1PathLabel = pathLabel;
+            m_playlist1RefreshButton = refresh;
+        } else {
+            m_playlist2PathLabel = pathLabel;
+            m_playlist2RefreshButton = refresh;
         }
 
-        auto scan = [this, index, list, path]() {
-            QSettings settings;
-            const QString folder = settings.value(QStringLiteral("playlist%1/path").arg(index)).toString();
+        QSettings settings;
+        const QString pathKey = QStringLiteral("playlist%1/path").arg(index);
+        const QString snapshotKey = QStringLiteral("playlist%1/snapshot").arg(index);
+        const QString savedPath = settings.value(pathKey).toString();
+        if (!savedPath.isEmpty()) {
+            pathLabel->setText(savedPath);
+            restoreSnapshot(list, settings.value(snapshotKey).toStringList());
+        } else {
+            list->addItem(QStringLiteral("请先选择文件夹"));
+        }
+
+        // Explicit scan only. On startup this is called once for each configured playlist.
+        // Merely selecting a playlist or opening its panel never triggers an SMB scan.
+        auto scan = [index, list, pathLabel]() {
+            QSettings currentSettings;
+            const QString folder = currentSettings.value(
+                QStringLiteral("playlist%1/path").arg(index)).toString();
             if (folder.isEmpty()) {
-                list->clear();
-                list->addItem(QStringLiteral("请先选择文件夹"));
+                pathLabel->setText(QStringLiteral("尚未指定文件夹"));
                 return;
             }
 
             QDir dir(folder);
             if (!dir.exists()) {
-                list->clear();
-                list->addItem(QStringLiteral("文件夹不可用"));
-                path->setText(folder + QStringLiteral("  [离线]"));
-                return;
+                pathLabel->setText(folder + QStringLiteral("  [离线，保留上次列表]"));
+                return; // Keep the previous snapshot visible on network failure.
             }
 
-            const QFileInfoList files = dir.entryInfoList(
-                QDir::Files | QDir::Readable,
-                QDir::Name | QDir::IgnoreCase);
+            QFileInfoList files = dir.entryInfoList(
+                QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
+            files.erase(std::remove_if(files.begin(), files.end(),
+                [](const QFileInfo &info) { return !isVideoFile(info); }), files.end());
 
-            list->clear();
-            for (const QFileInfo &info : files) {
-                if (isVideoFile(info)) {
-                    auto *item = new QListWidgetItem(info.fileName(), list);
-                    item->setToolTip(info.absoluteFilePath());
-                    item->setData(Qt::UserRole, info.absoluteFilePath());
-                }
-            }
+            QCollator collator;
+            collator.setNumericMode(true);
+            collator.setCaseSensitivity(Qt::CaseInsensitive);
+            std::sort(files.begin(), files.end(),
+                [&collator](const QFileInfo &a, const QFileInfo &b) {
+                    return collator.compare(a.fileName(), b.fileName()) < 0;
+                });
 
-            if (list->count() == 0) {
-                list->addItem(QStringLiteral("该文件夹没有支持的视频"));
-            }
-            path->setText(folder);
+            QStringList snapshot;
+            snapshot.reserve(files.size());
+            for (const QFileInfo &info : files)
+                snapshot.append(info.absoluteFilePath());
+
+            // Commit the new snapshot only after a successful directory enumeration.
+            currentSettings.setValue(
+                QStringLiteral("playlist%1/snapshot").arg(index), snapshot);
+            restoreSnapshot(list, snapshot);
+            pathLabel->setText(folder);
         };
 
-        connect(choose, &QPushButton::clicked, this, [this, index, path, scan]() {
-            QSettings settings;
-            const QString current = settings.value(QStringLiteral("playlist%1/path").arg(index)).toString();
+        connect(choose, &QPushButton::clicked, this, [this, index, pathLabel, list]() {
+            QSettings currentSettings;
+            const QString current = currentSettings.value(
+                QStringLiteral("playlist%1/path").arg(index)).toString();
             const QString folder = QFileDialog::getExistingDirectory(
-                this, QStringLiteral("选择播放列表 %1 文件夹").arg(index),
-                current);
-            if (folder.isEmpty()) {
+                this, QStringLiteral("选择播放列表 %1 文件夹").arg(index), current);
+            if (folder.isEmpty())
                 return;
-            }
-            settings.setValue(QStringLiteral("playlist%1/path").arg(index), folder);
-            path->setText(folder);
-            scan();
+
+            currentSettings.setValue(QStringLiteral("playlist%1/path").arg(index), folder);
+            pathLabel->setText(folder + QStringLiteral("  [已指定；手动刷新或下次启动时扫描]"));
+            restoreSnapshot(list, currentSettings.value(
+                QStringLiteral("playlist%1/snapshot").arg(index)).toStringList());
         });
 
         connect(refresh, &QPushButton::clicked, this, scan);
+
         connect(favorite, &QPushButton::clicked, this, [this, index]() {
-            QSettings settings;
-            const QString folder = settings.value(QStringLiteral("playlist%1/path").arg(index)).toString();
-            if (folder.isEmpty()) {
+            QSettings currentSettings;
+            const QString folder = currentSettings.value(
+                QStringLiteral("playlist%1/path").arg(index)).toString();
+            if (folder.isEmpty())
                 return;
-            }
-            QStringList favorites = settings.value(QStringLiteral("favorites")).toStringList();
+
+            QStringList favorites = currentSettings.value(
+                QStringLiteral("favorites")).toStringList();
             if (!favorites.contains(folder)) {
                 favorites.append(folder);
-                settings.setValue(QStringLiteral("favorites"), favorites);
+                currentSettings.setValue(QStringLiteral("favorites"), favorites);
                 m_favorites->clear();
-                for (const QString &item : favorites) {
-                    m_favorites->addItem(item);
-                }
+                for (const QString &entry : favorites)
+                    m_favorites->addItem(entry);
             }
         });
 
         connect(list, &QListWidget::itemDoubleClicked, this,
-                [this](QListWidgetItem *item) {
-                    const QString file = item->data(Qt::UserRole).toString();
-                    if (!file.isEmpty()) {
-                        m_currentFile->setText(file);
-                        m_videoPlaceholder->setText(QStringLiteral("已选择视频\n%1\n\n下一阶段接入 FFmpeg 播放").arg(file));
-                    }
-                });
+            [this](QListWidgetItem *item) {
+                const QString file = item->data(Qt::UserRole).toString();
+                if (file.isEmpty())
+                    return;
+                m_currentFile->setText(QFileInfo(file).fileName());
+                m_videoPlaceholder->setText(
+                    QStringLiteral("已选择视频
+%1
+
+下一阶段接入 FFmpeg 播放").arg(file));
+            });
+
+        // Refresh saved folders once when the application starts, never on panel activation.
+        if (!savedPath.isEmpty())
+            scan();
     };
 
     makePlaylistPanel(QStringLiteral("播放列表 1"), 1, &m_playlist1);
@@ -231,42 +273,31 @@ QWidget *MainWindow::createSidebar()
 
     QSettings settings;
     const QStringList favorites = settings.value(QStringLiteral("favorites")).toStringList();
-    for (const QString &folder : favorites) {
+    for (const QString &folder : favorites)
         m_favorites->addItem(folder);
-    }
-    if (m_favorites->count() == 0) {
+    if (m_favorites->count() == 0)
         m_favorites->addItem(QStringLiteral("暂无收藏文件夹"));
-    }
 
     connect(m_favorites, &QListWidget::itemDoubleClicked, this,
-            [this](QListWidgetItem *item) {
-                const QString folder = item->text();
-                if (folder.isEmpty() || folder == QStringLiteral("暂无收藏文件夹")) {
-                    return;
-                }
-                QSettings settings;
-                settings.setValue(QStringLiteral("playlist1/path"), folder);
-                m_playlist1->clear();
-                m_playlist1->addItem(QStringLiteral("已收藏：%1").arg(folder));
-                m_playlist1->setCurrentRow(0);
-            });
+        [this](QListWidgetItem *item) {
+            const QString folder = item->text();
+            if (folder.isEmpty() || folder == QStringLiteral("暂无收藏文件夹"))
+                return;
+
+            QSettings currentSettings;
+            currentSettings.setValue(QStringLiteral("playlist1/path"), folder);
+            if (m_playlist1PathLabel)
+                m_playlist1PathLabel->setText(
+                    folder + QStringLiteral("  [已切换；不会自动扫描]"));
+            restoreSnapshot(m_playlist1,
+                currentSettings.value(QStringLiteral("playlist1/snapshot")).toStringList());
+        });
 
     auto *hint = new QLabel(
-        QStringLiteral("SMB：打开/刷新时扫描一次\n播放过程中不后台扫描"),
+        QStringLiteral("SMB：仅播放器启动时扫描一次\n打开列表不扫描；手动刷新可立即更新"),
         sidebar);
     hint->setStyleSheet(QStringLiteral("color:#7f8996; font-size:11px; padding-top:5px;"));
     layout->addWidget(hint);
-
-    connect(openFolder, &QPushButton::clicked, this, [this]() {
-        QSettings settings;
-        const QString folder = QFileDialog::getExistingDirectory(this, QStringLiteral("选择文件夹"));
-        if (folder.isEmpty()) {
-            return;
-        }
-        settings.setValue(QStringLiteral("playlist1/path"), folder);
-        m_playlist1->clear();
-        m_playlist1->addItem(QStringLiteral("已指定：%1").arg(folder));
-    });
 
     return sidebar;
 }
@@ -313,15 +344,12 @@ QWidget *MainWindow::createControlBar()
     auto *speed = new QPushButton(QStringLiteral("1.0×"), bar);
     speed->setToolTip(QStringLiteral("播放速度"));
     top->addWidget(speed);
-
     auto *invert = new QPushButton(QStringLiteral("反色"), bar);
     invert->setToolTip(QStringLiteral("视频反色（后续接入 GPU Shader）"));
     top->addWidget(invert);
-
     auto *crop = new QPushButton(QStringLiteral("裁切"), bar);
     crop->setToolTip(QStringLiteral("画面裁切（后续接入）"));
     top->addWidget(crop);
-
     layout->addLayout(top);
 
     m_progress = new QSlider(Qt::Horizontal, bar);
@@ -336,7 +364,6 @@ QWidget *MainWindow::createControlBar()
     bottom->addWidget(new QLabel(QStringLiteral("音量"), bar));
     bottom->addWidget(iconButton(QStyle::SP_MediaVolume, QStringLiteral("音量"), bar));
     bottom->addWidget(iconButton(QStyle::SP_TitleBarMaxButton, QStringLiteral("全屏"), bar));
-
     layout->addLayout(bottom);
     return bar;
 }
