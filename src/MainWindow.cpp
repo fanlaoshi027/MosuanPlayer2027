@@ -85,9 +85,8 @@ protected:
     {
         if (event->button() == Qt::LeftButton && isSliderDown()) {
             setSliderPosition(valueAt(event->position().toPoint()));
-            setSliderDown(false);
             setValue(sliderPosition());
-            emit sliderReleased();
+            setSliderDown(false);
             event->accept();
             return;
         }
@@ -622,7 +621,9 @@ void MainWindow::applyInvertShader()
 {
     if (!m_mpv || !m_mpv->isReady()) return;
     if (!m_invertEnabled) {
-        m_mpv->setShader(QString());
+        if (!m_mpv->setShader(QString()))
+            QMessageBox::warning(this, QStringLiteral("反色关闭失败"),
+                QStringLiteral("mpv 未能清除反色 Shader。"));
         return;
     }
 
@@ -651,5 +652,13 @@ void MainWindow::applyInvertShader()
     if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) return;
     file.write(shader.toUtf8());
     file.close();
-    m_mpv->setShader(shaderPath);
+    if (!m_mpv->setShader(shaderPath)) {
+        QMessageBox::warning(this, QStringLiteral("反色启用失败"),
+            QStringLiteral("mpv 未能应用反色 Shader。请检查当前视频输出是否支持 GPU Shader。"));
+        m_invertEnabled = false;
+        QSettings settings;
+        settings.setValue(QStringLiteral("video/invertEnabled"), false);
+        if (m_invertButton)
+            m_invertButton->setText(QStringLiteral("反色：关"));
+    }
 }
