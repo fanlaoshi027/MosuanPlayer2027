@@ -29,14 +29,35 @@ jobs:
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
       - name: Build
         run: cmake --build build --config Release --parallel
+      - name: Download pinned LGPL libmpv
+        shell: pwsh
+        run: |
+          $url = "https://github.com/mpv-player/mpv/releases/download/v0.42.0/libmpv-v0.42.0-x86_64-w64-mingw32-lgpl.zip"
+          $expected = "8e5f77430efc53ef175804ba6618527e3af0448a0dcabf04d3cc72659d1a6fce"
+          Invoke-WebRequest -Uri $url -OutFile "libmpv-lgpl.zip"
+          $actual = (Get-FileHash "libmpv-lgpl.zip" -Algorithm SHA256).Hash.ToLower()
+          if ($actual -ne $expected) { throw "libmpv SHA256 mismatch: $actual" }
+          Expand-Archive -Path "libmpv-lgpl.zip" -DestinationPath "libmpv-unpacked" -Force
+          $mpvDll = Get-ChildItem "libmpv-unpacked" -Recurse -File -Filter "libmpv-2.dll" | Select-Object -First 1
+          if (!$mpvDll) { throw "Pinned LGPL package did not contain libmpv-2.dll" }
+          New-Item -ItemType Directory -Force -Path "package" | Out-Null
+          Copy-Item $mpvDll.FullName "package/"
+          Get-ChildItem "libmpv-unpacked" -Recurse -File -Filter "*.dll" | Where-Object { $_.FullName -ne $mpvDll.FullName } | ForEach-Object { Copy-Item $_.FullName "package/" -Force }
       - name: Prepare portable package
         shell: pwsh
         run: |
           $exe = "build/Release/MosuanPlayer.exe"
           if (!(Test-Path $exe)) { throw "Build output not found: $exe" }
-          New-Item -ItemType Directory -Force -Path "package" | Out-Null
           Copy-Item $exe "package/"
           windeployqt --release --no-translations "package/MosuanPlayer.exe"
+          @"
+          MosuanPlayer2027 prototype
+          Media engine: mpv v0.42.0 LGPL build
+          Upstream: https://github.com/mpv-player/mpv
+          Build mode: official x86_64-w64-mingw32 LGPL asset, SHA256 verified in CI
+          This package is for technical validation only. Corresponding source bundle and complete release notices must be prepared before commercial distribution.
+          LGPL source: https://github.com/mpv-player/mpv/releases/tag/v0.42.0
+          "@ | Set-Content "package/THIRD-PARTY-NOTICES.txt" -Encoding UTF8
           Compress-Archive -Path "package/*" -DestinationPath "MosuanPlayer2027-Windows-x64.zip" -Force
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
