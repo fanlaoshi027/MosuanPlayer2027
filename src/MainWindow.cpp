@@ -21,6 +21,12 @@
 #include <QWidget>
 #include <QMessageBox>
 #include <QTimer>
+#include <QMenu>
+#include <QAction>
+#include <QFile>
+#include <QDir>
+#include <QStandardPaths>
+#include <QColor>
 
 #include <algorithm>
 
@@ -84,6 +90,11 @@ MainWindow::MainWindow(QWidget *parent)
     m_statusTimer->setInterval(250);
     connect(m_statusTimer, &QTimer::timeout, this, &MainWindow::updatePlaybackStatus);
     m_statusTimer->start();
+    QSettings settings;
+    m_invertEnabled = settings.value(QStringLiteral("video/invertEnabled"), false).toBool();
+    m_invertBackground = settings.value(QStringLiteral("video/invertBackground"), QStringLiteral("#191919")).toString();
+    if (m_invertButton)
+        m_invertButton->setText(m_invertEnabled ? QStringLiteral("反色：开") : QStringLiteral("反色：关"));
 }
 
 void MainWindow::buildUi()
@@ -388,9 +399,37 @@ QWidget *MainWindow::createControlBar()
         m_speedButton->setText(QStringLiteral("%1×").arg(m_speed, 0, 'f', 2));
         if (m_mpv && m_mpv->isReady()) m_mpv->setSpeed(m_speed);
     });
-    auto *invert = new QPushButton(QStringLiteral("反色"), bar);
-    invert->setToolTip(QStringLiteral("视频反色（后续接入 GPU Shader）"));
-    top->addWidget(invert);
+    m_invertButton = new QPushButton(m_invertEnabled ? QStringLiteral("反色：开") : QStringLiteral("反色：关"), bar);
+    m_invertButton->setToolTip(QStringLiteral("开启或关闭 GPU 反色"));
+    top->addWidget(m_invertButton);
+    connect(m_invertButton, &QPushButton::clicked, this, [this]() {
+        m_invertEnabled = !m_invertEnabled;
+        QSettings settings;
+        settings.setValue(QStringLiteral("video/invertEnabled"), m_invertEnabled);
+        m_invertButton->setText(m_invertEnabled ? QStringLiteral("反色：开") : QStringLiteral("反色：关"));
+        applyInvertShader();
+    });
+
+    auto *backgroundButton = new QPushButton(QStringLiteral("背景色"), bar);
+    auto *backgroundMenu = new QMenu(backgroundButton);
+    const QList<QPair<QString, QString>> backgrounds = {
+        {QStringLiteral("90%灰黑"), QStringLiteral("#191919")},
+        {QStringLiteral("焦炭"), QStringLiteral("#252525")},
+        {QStringLiteral("深蓝"), QStringLiteral("#10243A")},
+        {QStringLiteral("深绿"), QStringLiteral("#102E25")}
+    };
+    for (const auto &entry : backgrounds) {
+        QAction *action = backgroundMenu->addAction(entry.first);
+        action->setData(entry.second);
+        connect(action, &QAction::triggered, this, [this, action]() {
+            m_invertBackground = action->data().toString();
+            QSettings settings;
+            settings.setValue(QStringLiteral("video/invertBackground"), m_invertBackground);
+            applyInvertShader();
+        });
+    }
+    backgroundButton->setMenu(backgroundMenu);
+    top->addWidget(backgroundButton);
     auto *crop = new QPushButton(QStringLiteral("裁切"), bar);
     crop->setToolTip(QStringLiteral("画面裁切（后续接入）"));
     top->addWidget(crop);
@@ -460,6 +499,7 @@ void MainWindow::playFile(const QString &path)
     m_speed = 1.0;
     m_mpv->setSpeed(m_speed);
     m_mpv->setVolume(m_volumeSlider ? m_volumeSlider->value() : 80);
+    if (m_invertEnabled) applyInvertShader();
     m_autoAdvanceTriggered = false;
     m_speedButton->setText(QStringLiteral("1.0×"));
     m_currentFile->setText(QFileInfo(path).fileName());
@@ -512,4 +552,40 @@ void MainWindow::playAdjacent(int offset)
     m_activeRow = nextRow;
     m_activePlaylist->setCurrentRow(nextRow);
     playFile(file);
+}
+
+void MainWindow::applyInvertShader()
+{
+    if (!m_mpv || !m_mpv->isReady()) return;
+    if (!m_invertEnabled) {
+        m_mpv->setShader(QString());
+        return;
+    }
+
+    const QColor bg(m_invertBackground);
+    if (!bg.isValid()) return;
+    const QString shader = QStringLiteral(
+        "//!HOOK OUTPUT\\n"
+        "//!BIND HOOKED\\n"
+        "//!DESC Mosuan simple GPU inversion\\n"
+        "vec4 hook() {\\n"
+        "    vec4 color = HOOKED_tex(HOOKED_pos);\\n"
+        "    float whiteMask = smoothstep(0.90, 0.995, min(min(color.r, color.g), color.b));\\n"
+        "    vec3 inverted = vec3(1.0) - color.rgb;\\n"
+        "    vec3 background = vec3(%1, %2, %3);\\n"
+        "    color.rgb = mix(inverted, background, whiteMask);\\n"
+        "    return color;\\n"
+        "}\\n")
+        .arg(bg.redF(), 0, 'f', 6)
+        .arg(bg.greenF(), 0, 'f', 6)
+        .arg(bg.blueF(), 0, 'f', 6);
+
+    const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (appData.isEmpty() || !QDir().mkpath(appData)) return;
+    const QString shaderPath = QDir(appData).filePath(QStringLiteral("mosuan-invert.glsl"));
+    QFile file(shaderPath);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate | QIODevice::Text)) return;
+    file.write(shader.toUtf8());
+    file.close();
+    m_mpv->setShader(shaderPath);
 }
