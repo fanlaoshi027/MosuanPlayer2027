@@ -30,7 +30,7 @@ Windows-first teaching video player. Proprietary application code; third-party d
 ## Not yet implemented
 - Camera exclusion rectangle with independent dimming.
 - Mouse-drag rectangular crop selection on the video surface (not yet implemented; current crop uses four percentage sliders).
-- Fullscreen mode and configurable hotkeys.
+- Window fullscreen toggle with F11 and Escape exit shortcuts; configurable hotkeys remain unimplemented.
 - Resume position persistence and playlist queue behavior.
 - Automated runtime playback tests on physical Windows hardware.
 
