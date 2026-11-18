@@ -34,6 +34,7 @@
 #include <QDialog>
 #include <QFormLayout>
 #include <QDialogButtonBox>
+#include <QKeyEvent>
 
 #include <algorithm>
 
@@ -602,7 +603,11 @@ QWidget *MainWindow::createControlBar()
     connect(m_volumeSlider, &QSlider::valueChanged, this, [this](int value) {
         if (m_mpv && m_mpv->isReady()) m_mpv->setVolume(value);
     });
-    bottom->addWidget(iconButton(QStyle::SP_TitleBarMaxButton, QStringLiteral("全屏"), bar));
+    auto *fullscreenButton = iconButton(QStyle::SP_TitleBarMaxButton, QStringLiteral("全屏 / 退出全屏 (Esc)"), bar);
+    bottom->addWidget(fullscreenButton);
+    connect(fullscreenButton, &QToolButton::clicked, this, [this]() {
+        if (isFullScreen()) showNormal(); else showFullScreen();
+    });
     layout->addLayout(bottom);
     return bar;
 }
@@ -781,4 +786,16 @@ void MainWindow::saveVideoCrop()
     settings.setValue(prefix + QStringLiteral("/right"), m_cropRight);
     settings.setValue(prefix + QStringLiteral("/top"), m_cropTop);
     settings.setValue(prefix + QStringLiteral("/bottom"), m_cropBottom);
+}
+
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape && isFullScreen()) {
+        showNormal(); event->accept(); return;
+    }
+    if (event->key() == Qt::Key_F11) {
+        if (isFullScreen()) showNormal(); else showFullScreen();
+        event->accept(); return;
+    }
+    QMainWindow::keyPressEvent(event);
 }
