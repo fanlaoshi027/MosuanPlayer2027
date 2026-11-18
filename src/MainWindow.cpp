@@ -114,7 +114,7 @@ QWidget *MainWindow::createSidebar()
     auto *openFolder = new QPushButton(QStringLiteral("＋ 添加文件夹播放列表"), sidebar);
     layout->addWidget(openFolder);
 
-    auto *makePlaylistPanel = [this, layout](const QString &title, int index, QListWidget **outList) {
+    auto makePlaylistPanel = [this, layout](const QString &title, int index, QListWidget **outList) {
         layout->addWidget(sectionTitle(title, this));
 
         auto *path = new QLabel(QStringLiteral("尚未指定文件夹"), this);
