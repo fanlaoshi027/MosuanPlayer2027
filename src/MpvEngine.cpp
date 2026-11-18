@@ -116,3 +116,8 @@ bool MpvEngine::setPropertyString(const char *name, const QString &value) {
     const QByteArray utf8 = value.toUtf8();
     return m_setPropertyString(m_handle, name, utf8.constData()) >= 0;
 }
+
+bool MpvEngine::getInt64Property(const char *name, qint64 *value) const {
+    if (!m_handle || !m_getProperty || !value) return false;
+    return m_getProperty(m_handle, name, 4, value) >= 0;
+}

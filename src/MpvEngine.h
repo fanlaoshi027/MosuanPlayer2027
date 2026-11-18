@@ -19,6 +19,7 @@ public:
     bool setPropertyString(const char *name, const QString &value);
     bool seek(double seconds);
     bool getDoubleProperty(const char *name, double *value) const;
+    bool getInt64Property(const char *name, qint64 *value) const;
     bool isReady() const noexcept { return m_handle != nullptr; }
 private:
     using CreateFn = void *(*)();
