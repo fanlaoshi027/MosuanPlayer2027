@@ -1,6 +1,8 @@
 #include "MainWindow.h"
 
 #include <QCollator>
+#include <QFutureWatcher>
+#include <QtConcurrent/QtConcurrentRun>
 #include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -20,6 +22,12 @@
 #include <algorithm>
 
 namespace {
+struct FolderScanResult {
+    bool success = false;
+    QStringList files;
+    QString error;
+};
+
 const QStringList kVideoExtensions = {
     QStringLiteral("mp4"), QStringLiteral("mkv"), QStringLiteral("mov"),
     QStringLiteral("avi"), QStringLiteral("wmv"), QStringLiteral("flv"),
@@ -170,7 +178,7 @@ QWidget *MainWindow::createSidebar()
 
         // Explicit scan only. On startup this is called once for each configured playlist.
         // Merely selecting a playlist or opening its panel never triggers an SMB scan.
-        auto scan = [index, list, pathLabel]() {
+        auto scan = [this, index, list, pathLabel, refresh]() {
             QSettings currentSettings;
             const QString folder = currentSettings.value(
                 QStringLiteral("playlist%1/path").arg(index)).toString();
@@ -179,35 +187,54 @@ QWidget *MainWindow::createSidebar()
                 return;
             }
 
-            QDir dir(folder);
-            if (!dir.exists()) {
-                pathLabel->setText(folder + QStringLiteral("  [离线，保留上次列表]"));
-                return; // Keep the previous snapshot visible on network failure.
-            }
+            refresh->setEnabled(false);
+            refresh->setText(QStringLiteral("扫描中…"));
 
-            QFileInfoList files = dir.entryInfoList(
-                QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
-            files.erase(std::remove_if(files.begin(), files.end(),
-                [](const QFileInfo &info) { return !isVideoFile(info); }), files.end());
+            auto *watcher = new QFutureWatcher<FolderScanResult>(this);
+            connect(watcher, &QFutureWatcher<FolderScanResult>::finished, this,
+                [watcher, index, list, pathLabel, refresh, folder]() {
+                    const FolderScanResult result = watcher->result();
+                    watcher->deleteLater();
+                    refresh->setEnabled(true);
+                    refresh->setText(QStringLiteral("手动刷新"));
 
-            QCollator collator;
-            collator.setNumericMode(true);
-            collator.setCaseSensitivity(Qt::CaseInsensitive);
-            std::sort(files.begin(), files.end(),
-                [&collator](const QFileInfo &a, const QFileInfo &b) {
-                    return collator.compare(a.fileName(), b.fileName()) < 0;
+                    if (!result.success) {
+                        pathLabel->setText(folder + QStringLiteral("  [不可用；保留上次列表]"));
+                        return;
+                    }
+
+                    QSettings saved;
+                    saved.setValue(QStringLiteral("playlist%1/snapshot").arg(index), result.files);
+                    restoreSnapshot(list, result.files);
+                    pathLabel->setText(folder + QStringLiteral("  [%1 个视频]").arg(result.files.size()));
                 });
 
-            QStringList snapshot;
-            snapshot.reserve(files.size());
-            for (const QFileInfo &info : files)
-                snapshot.append(info.absoluteFilePath());
+            watcher->setFuture(QtConcurrent::run([folder]() {
+                FolderScanResult result;
+                QDir dir(folder);
+                if (!dir.exists()) {
+                    result.error = QStringLiteral("目录不存在或网络不可用");
+                    return result;
+                }
 
-            // Commit the new snapshot only after a successful directory enumeration.
-            currentSettings.setValue(
-                QStringLiteral("playlist%1/snapshot").arg(index), snapshot);
-            restoreSnapshot(list, snapshot);
-            pathLabel->setText(folder);
+                QFileInfoList entries = dir.entryInfoList(
+                    QDir::Files | QDir::Readable | QDir::NoDotAndDotDot);
+                QCollator collator;
+                collator.setNumericMode(true);
+                collator.setCaseSensitivity(Qt::CaseInsensitive);
+                std::sort(entries.begin(), entries.end(),
+                    [&collator](const QFileInfo &a, const QFileInfo &b) {
+                        return collator.compare(a.fileName(), b.fileName()) < 0;
+                    });
+
+                result.files.reserve(entries.size());
+                for (const QFileInfo &info : entries) {
+                    if (isVideoFile(info))
+                        result.files.append(info.absoluteFilePath());
+                }
+                result.success = true;
+                return result;
+            }));
         };
 
         connect(choose, &QPushButton::clicked, this, [this, index, pathLabel, list]() {
