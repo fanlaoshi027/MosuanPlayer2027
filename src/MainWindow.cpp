@@ -20,6 +20,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 #include <QMessageBox>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -79,6 +80,10 @@ MainWindow::MainWindow(QWidget *parent)
     setMinimumSize(960, 600);
     buildUi();
     m_mpv = new MpvEngine(this);
+    m_statusTimer = new QTimer(this);
+    m_statusTimer->setInterval(250);
+    connect(m_statusTimer, &QTimer::timeout, this, &MainWindow::updatePlaybackStatus);
+    m_statusTimer->start();
 }
 
 void MainWindow::buildUi()
@@ -276,10 +281,12 @@ QWidget *MainWindow::createSidebar()
         });
 
         connect(list, &QListWidget::itemDoubleClicked, this,
-            [this](QListWidgetItem *item) {
+            [this, list](QListWidgetItem *item) {
                 const QString file = item->data(Qt::UserRole).toString();
                 if (file.isEmpty())
                     return;
+                m_activePlaylist = list;
+                m_activeRow = list->row(item);
                 playFile(file);
             });
 
@@ -389,12 +396,29 @@ QWidget *MainWindow::createControlBar()
     top->addWidget(crop);
     layout->addLayout(top);
 
+    auto *timeRow = new QHBoxLayout;
+    m_timeLabel = new QLabel(QStringLiteral("00:00 / 00:00"), bar);
+    m_timeLabel->setMinimumWidth(110);
+    timeRow->addWidget(m_timeLabel);
     m_progress = new QSlider(Qt::Horizontal, bar);
     m_progress->setRange(0, 1000);
-    layout->addWidget(m_progress);
+    m_progress->setTracking(false);
+    timeRow->addWidget(m_progress, 1);
+    layout->addLayout(timeRow);
+    connect(m_progress, &QSlider::sliderPressed, this, [this]() { m_seeking = true; });
+    connect(m_progress, &QSlider::sliderReleased, this, [this]() {
+        if (m_mpv && m_mpv->isReady()) {
+            double duration = 0.0;
+            if (m_mpv->getDoubleProperty("duration", &duration) && duration > 0.0)
+                m_mpv->seek(duration * m_progress->value() / 1000.0);
+        }
+        m_seeking = false;
+    });
 
     auto *bottom = new QHBoxLayout;
-    bottom->addWidget(iconButton(QStyle::SP_MediaSkipBackward, QStringLiteral("上一个"), bar));
+    auto *previousButton = iconButton(QStyle::SP_MediaSkipBackward, QStringLiteral("上一个"), bar);
+    bottom->addWidget(previousButton);
+    connect(previousButton, &QToolButton::clicked, this, [this]() { playAdjacent(-1); });
     m_playPauseButton = new QPushButton(QStringLiteral("播放/暂停"), bar);
     bottom->addWidget(m_playPauseButton);
     connect(m_playPauseButton, &QPushButton::clicked, this, [this]() {
@@ -403,10 +427,19 @@ QWidget *MainWindow::createControlBar()
         m_mpv->setPaused(m_paused);
         m_playPauseButton->setText(m_paused ? QStringLiteral("继续") : QStringLiteral("暂停"));
     });
-    bottom->addWidget(iconButton(QStyle::SP_MediaSkipForward, QStringLiteral("下一个"), bar));
+    auto *nextButton = iconButton(QStyle::SP_MediaSkipForward, QStringLiteral("下一个"), bar);
+    bottom->addWidget(nextButton);
+    connect(nextButton, &QToolButton::clicked, this, [this]() { playAdjacent(1); });
     bottom->addStretch();
     bottom->addWidget(new QLabel(QStringLiteral("音量"), bar));
-    bottom->addWidget(iconButton(QStyle::SP_MediaVolume, QStringLiteral("音量"), bar));
+    m_volumeSlider = new QSlider(Qt::Horizontal, bar);
+    m_volumeSlider->setRange(0, 100);
+    m_volumeSlider->setValue(80);
+    m_volumeSlider->setFixedWidth(110);
+    bottom->addWidget(m_volumeSlider);
+    connect(m_volumeSlider, &QSlider::valueChanged, this, [this](int value) {
+        if (m_mpv && m_mpv->isReady()) m_mpv->setVolume(value);
+    });
     bottom->addWidget(iconButton(QStyle::SP_TitleBarMaxButton, QStringLiteral("全屏"), bar));
     layout->addLayout(bottom);
     return bar;
@@ -426,8 +459,57 @@ void MainWindow::playFile(const QString &path)
     m_paused = false;
     m_speed = 1.0;
     m_mpv->setSpeed(m_speed);
+    m_mpv->setVolume(m_volumeSlider ? m_volumeSlider->value() : 80);
+    m_autoAdvanceTriggered = false;
     m_speedButton->setText(QStringLiteral("1.0×"));
     m_currentFile->setText(QFileInfo(path).fileName());
     m_videoPlaceholder->hide();
     m_playPauseButton->setText(QStringLiteral("暂停"));
+}
+
+QString MainWindow::formatTime(double seconds) const
+{
+    const qint64 total = qMax<qint64>(0, static_cast<qint64>(seconds));
+    const qint64 hours = total / 3600;
+    const qint64 minutes = (total % 3600) / 60;
+    const qint64 secs = total % 60;
+    if (hours > 0)
+        return QStringLiteral("%1:%2:%3").arg(hours).arg(minutes, 2, 10, QLatin1Char('0')).arg(secs, 2, 10, QLatin1Char('0'));
+    return QStringLiteral("%1:%2").arg(minutes).arg(secs, 2, 10, QLatin1Char('0'));
+}
+
+void MainWindow::updatePlaybackStatus()
+{
+    if (!m_mpv || !m_mpv->isReady()) return;
+    double position = 0.0;
+    double duration = 0.0;
+    const bool hasPosition = m_mpv->getDoubleProperty("time-pos", &position);
+    const bool hasDuration = m_mpv->getDoubleProperty("duration", &duration);
+    if (!hasPosition || !hasDuration || duration <= 0.0) return;
+
+    if (!m_seeking) {
+        const int value = qBound(0, static_cast<int>((position / duration) * 1000.0), 1000);
+        m_progress->setValue(value);
+    }
+    m_timeLabel->setText(formatTime(position) + QStringLiteral(" / ") + formatTime(duration));
+
+    if (!m_paused && position >= duration - 0.45 && !m_autoAdvanceTriggered) {
+        m_autoAdvanceTriggered = true;
+        playAdjacent(1);
+    }
+    if (position < duration - 1.0)
+        m_autoAdvanceTriggered = false;
+}
+
+void MainWindow::playAdjacent(int offset)
+{
+    if (!m_activePlaylist || m_activePlaylist->count() == 0) return;
+    const int nextRow = m_activeRow + offset;
+    if (nextRow < 0 || nextRow >= m_activePlaylist->count()) return;
+    auto *item = m_activePlaylist->item(nextRow);
+    const QString file = item ? item->data(Qt::UserRole).toString() : QString();
+    if (file.isEmpty()) return;
+    m_activeRow = nextRow;
+    m_activePlaylist->setCurrentRow(nextRow);
+    playFile(file);
 }
