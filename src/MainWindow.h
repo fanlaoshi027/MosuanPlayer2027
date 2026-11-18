@@ -29,6 +29,8 @@ private:
     void playAdjacent(int offset);
     QString formatTime(double seconds) const;
     void applyInvertShader();
+    bool applyVideoCrop(QString *errorMessage = nullptr);
+    void saveVideoCrop();
 
     QListWidget *m_playlist1 = nullptr;
     QListWidget *m_playlist2 = nullptr;
@@ -53,9 +55,11 @@ private:
     int m_activeRow = -1;
     bool m_seeking = false;
     bool m_autoAdvanceTriggered = false;
-    double m_cropZoom = 0.0;
-    double m_cropPanX = 0.0;
-    double m_cropPanY = 0.0;
+    int m_cropLeft = 0;
+    int m_cropRight = 0;
+    int m_cropTop = 0;
+    int m_cropBottom = 0;
+    QString m_currentPath;
     QString m_currentPath;
     bool m_invertEnabled = false;
     QString m_invertBackground = QStringLiteral("#191919");

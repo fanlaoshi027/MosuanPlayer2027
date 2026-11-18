@@ -30,6 +30,7 @@
 #include <QStandardPaths>
 #include <QColor>
 #include <QCryptographicHash>
+#include <QCryptographicHash>
 #include <QDialog>
 #include <QFormLayout>
 #include <QDialogButtonBox>
@@ -509,42 +510,44 @@ QWidget *MainWindow::createControlBar()
         dialog.setWindowTitle(QStringLiteral("画面裁切与定位"));
         dialog.setMinimumWidth(360);
         auto *form = new QFormLayout(&dialog);
-        auto *zoom = new QSlider(Qt::Horizontal, &dialog);
-        zoom->setRange(0, 20);
-        zoom->setValue(qBound(0, qRound(m_cropZoom * 10.0), 20));
-        auto *horizontal = new QSlider(Qt::Horizontal, &dialog);
-        horizontal->setRange(-100, 100);
-        horizontal->setValue(qBound(-100, qRound(m_cropPanX * 100.0), 100));
-        auto *vertical = new QSlider(Qt::Horizontal, &dialog);
-        vertical->setRange(-100, 100);
-        vertical->setValue(qBound(-100, qRound(m_cropPanY * 100.0), 100));
-        form->addRow(QStringLiteral("放大程度"), zoom);
-        form->addRow(QStringLiteral("水平位置"), horizontal);
-        form->addRow(QStringLiteral("垂直位置"), vertical);
+        auto makeCropSlider = [&dialog](int value) {
+            auto *slider = new QSlider(Qt::Horizontal, &dialog);
+            slider->setRange(0, 40);
+            slider->setValue(qBound(0, value, 40));
+            return slider;
+        };
+        auto *left = makeCropSlider(m_cropLeft);
+        auto *right = makeCropSlider(m_cropRight);
+        auto *topCrop = makeCropSlider(m_cropTop);
+        auto *bottomCrop = makeCropSlider(m_cropBottom);
+        form->addRow(QStringLiteral("左侧裁掉 (%)"), left);
+        form->addRow(QStringLiteral("右侧裁掉 (%)"), right);
+        form->addRow(QStringLiteral("顶部裁掉 (%)"), topCrop);
+        form->addRow(QStringLiteral("底部裁掉 (%)"), bottomCrop);
+        auto applyFromDialog = [this, left, right, topCrop, bottomCrop]() {
+            m_cropLeft = left->value();
+            m_cropRight = right->value();
+            m_cropTop = topCrop->value();
+            m_cropBottom = bottomCrop->value();
+            QString error;
+            if (!applyVideoCrop(&error))
+                QMessageBox::warning(this, QStringLiteral("裁切未应用"), error);
+            else
+                saveVideoCrop();
+        };
+        connect(left, &QSlider::valueChanged, this, [applyFromDialog](int) { applyFromDialog(); });
+        connect(right, &QSlider::valueChanged, this, [applyFromDialog](int) { applyFromDialog(); });
+        connect(topCrop, &QSlider::valueChanged, this, [applyFromDialog](int) { applyFromDialog(); });
+        connect(bottomCrop, &QSlider::valueChanged, this, [applyFromDialog](int) { applyFromDialog(); });
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Reset | QDialogButtonBox::Close, &dialog);
         form->addRow(buttons);
-        connect(zoom, &QSlider::valueChanged, this, [this](int v) {
-            m_cropZoom = v / 10.0;
-            m_mpv->setPropertyString("video-zoom", QString::number(m_cropZoom, 'f', 2));
-            QSettings().setValue(QStringLiteral("video/crop/") + QString::fromLatin1(QCryptographicHash::hash(QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex()) + QStringLiteral("/zoom"), m_cropZoom);
-        });
-        connect(horizontal, &QSlider::valueChanged, this, [this](int v) {
-            m_cropPanX = v / 100.0;
-            m_mpv->setPropertyString("video-pan-x", QString::number(m_cropPanX, 'f', 2));
-            QSettings().setValue(QStringLiteral("video/crop/") + QString::fromLatin1(QCryptographicHash::hash(QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex()) + QStringLiteral("/panX"), m_cropPanX);
-        });
-        connect(vertical, &QSlider::valueChanged, this, [this](int v) {
-            m_cropPanY = v / 100.0;
-            m_mpv->setPropertyString("video-pan-y", QString::number(m_cropPanY, 'f', 2));
-            QSettings().setValue(QStringLiteral("video/crop/") + QString::fromLatin1(QCryptographicHash::hash(QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex()) + QStringLiteral("/panY"), m_cropPanY);
+        connect(buttons->button(QDialogButtonBox::Reset), &QPushButton::clicked, &dialog, [left, right, topCrop, bottomCrop]() {
+            left->setValue(0);
+            right->setValue(0);
+            topCrop->setValue(0);
+            bottomCrop->setValue(0);
         });
         connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-        connect(buttons->button(QDialogButtonBox::Reset), &QPushButton::clicked, &dialog, [&, this]() {
-            zoom->setValue(0);
-            horizontal->setValue(0);
-            vertical->setValue(0);
-        });
         dialog.exec();
     });
     layout->addLayout(top);
@@ -618,12 +621,12 @@ void MainWindow::playFile(const QString &path)
         QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex();
     QSettings cropSettings;
     const QString cropPrefix = QStringLiteral("video/crop/") + QString::fromLatin1(pathKey);
-    m_cropZoom = cropSettings.value(cropPrefix + QStringLiteral("/zoom"), 0.0).toDouble();
-    m_cropPanX = cropSettings.value(cropPrefix + QStringLiteral("/panX"), 0.0).toDouble();
-    m_cropPanY = cropSettings.value(cropPrefix + QStringLiteral("/panY"), 0.0).toDouble();
-    m_mpv->setPropertyString("video-zoom", QString::number(m_cropZoom, 'f', 2));
-    m_mpv->setPropertyString("video-pan-x", QString::number(m_cropPanX, 'f', 2));
-    m_mpv->setPropertyString("video-pan-y", QString::number(m_cropPanY, 'f', 2));
+    m_currentPath = QFileInfo(path).absoluteFilePath();
+    m_cropLeft = cropSettings.value(cropPrefix + QStringLiteral("/left"), 0).toInt();
+    m_cropRight = cropSettings.value(cropPrefix + QStringLiteral("/right"), 0).toInt();
+    m_cropTop = cropSettings.value(cropPrefix + QStringLiteral("/top"), 0).toInt();
+    m_cropBottom = cropSettings.value(cropPrefix + QStringLiteral("/bottom"), 0).toInt();
+    applyVideoCrop();
     if (m_invertEnabled) applyInvertShader();
     m_autoAdvanceTriggered = false;
     m_speedButton->setText(QStringLiteral("1.0×"));
@@ -723,4 +726,50 @@ void MainWindow::applyInvertShader()
         if (m_invertButton)
             m_invertButton->setText(QStringLiteral("反色：关"));
     }
+}
+
+bool MainWindow::applyVideoCrop(QString *errorMessage)
+{
+    if (!m_mpv || !m_mpv->isReady()) {
+        if (errorMessage) *errorMessage = QStringLiteral("播放引擎尚未就绪。");
+        return false;
+    }
+    if (m_cropLeft + m_cropRight >= 90 || m_cropTop + m_cropBottom >= 90) {
+        if (errorMessage) *errorMessage = QStringLiteral("裁切比例过大，请为画面保留至少 10%。");
+        return false;
+    }
+    if (m_cropLeft + m_cropRight + m_cropTop + m_cropBottom == 0)
+        return m_mpv->setPropertyString("video-crop", QString());
+
+    qint64 width = 0;
+    qint64 height = 0;
+    if (!m_mpv->getInt64Property("width", &width)
+        || !m_mpv->getInt64Property("height", &height)
+        || width <= 0 || height <= 0) {
+        if (errorMessage) *errorMessage = QStringLiteral("尚未读取到视频原始分辨率，请等待视频画面开始后再裁切。");
+        return false;
+    }
+    const qint64 x = width * m_cropLeft / 100;
+    const qint64 y = height * m_cropTop / 100;
+    const qint64 cropWidth = width * (100 - m_cropLeft - m_cropRight) / 100;
+    const qint64 cropHeight = height * (100 - m_cropTop - m_cropBottom) / 100;
+    const QString value = QStringLiteral("%1x%2+%3+%4").arg(cropWidth).arg(cropHeight).arg(x).arg(y);
+    if (!m_mpv->setPropertyString("video-crop", value)) {
+        if (errorMessage) *errorMessage = QStringLiteral("libmpv 拒绝了裁切参数：%1").arg(value);
+        return false;
+    }
+    return true;
+}
+
+void MainWindow::saveVideoCrop()
+{
+    if (m_currentPath.isEmpty()) return;
+    const QByteArray key = QCryptographicHash::hash(
+        QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex();
+    const QString prefix = QStringLiteral("video/crop/") + QString::fromLatin1(key);
+    QSettings settings;
+    settings.setValue(prefix + QStringLiteral("/left"), m_cropLeft);
+    settings.setValue(prefix + QStringLiteral("/right"), m_cropRight);
+    settings.setValue(prefix + QStringLiteral("/top"), m_cropTop);
+    settings.setValue(prefix + QStringLiteral("/bottom"), m_cropBottom);
 }
