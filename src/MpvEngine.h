@@ -3,6 +3,7 @@
 #include <QString>
 #include <QLibrary>
 #include <QtGlobal>
+#include <QtGui/qwindowdefs.h>
 
 class MpvEngine final : public QObject {
     Q_OBJECT
