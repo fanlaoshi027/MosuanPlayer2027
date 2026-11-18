@@ -1,22 +1,23 @@
-# Third-party licensing policy
+# Third-party licensing plan
 
-## Product requirement
-MosuanPlayer application code is intended to remain proprietary. No third-party commercial license purchases are planned. This is an engineering compliance plan, not legal advice or a final legal opinion.
+## Product licensing model
+MosuanPlayer application code is intended to remain closed-source. Third-party components keep their original licenses. This plan is an engineering checklist, not legal advice.
+
+## Media engine: libmpv
+- The selected engine is libmpv, dynamically loaded as libmpv-2.dll.
+- mpv is GPLv2+ by default. The mpv project documents an LGPLv2.1+ build mode when GPL-only files are excluded using -Dgpl=false. The build switch alone is not proof: inspect the actual build and all linked dependencies.
+- Build FFmpeg without GPL-only and nonfree components. Verify its configure flags and exact source revision.
+- Prefer a replaceable shared libmpv DLL. Do not statically merge libmpv into MosuanPlayer.
+- Include the exact corresponding source for libmpv and LGPL components, build scripts/configuration, license texts, copyright notices and any required modification notices.
+- Preserve LGPL rights to replace/relink the library and reverse-engineer solely for debugging modifications to the LGPL library, subject to the applicable license terms.
+- Record exact upstream commits, build recipe, compiler, dependency versions, DLL hashes and source archive hashes for every shipped release.
+- Never bundle an arbitrary third-party DLL merely because its filename says LGPL.
+
+## Current integration
+The application dynamically loads libmpv-2.dll and uses mpv's native-window embedding option. The current CI package does not yet include a verified libmpv DLL. The player therefore reports a missing engine at runtime until the audited LGPL binary is added to the package.
 
 ## Qt
-Use only Qt modules available under LGPL terms for the selected Qt release. Prefer dynamic linking. Avoid Qt modules available only under GPL for open-source users. Ship required license texts, corresponding Qt source (including modifications), notices and a practical relinking/replacement mechanism as required by the applicable LGPL terms.
-
-## FFmpeg
-FFmpeg is generally LGPL 2.1-or-later, but optional components can change the license. Build without `--enable-gpl` and without `--enable-nonfree`; dynamically link DLLs. Audit every enabled external library and codec. Preserve exact source corresponding to distributed binaries, patches, build configuration and notices. Do not enable GPL codecs/filters or non-redistributable components.
-
-## Prohibited assumptions
-- Do not assume every FFmpeg build is LGPL.
-- Do not assume Qt Multimedia or any prebuilt bundle has a simple license without auditing its exact plugin/dependency set.
-- Do not use libmpv in the proprietary build path; mpv is GPL-licensed.
-- Do not ship unknown prebuilt DLLs.
-
-## Required dependency manifest
-For every shipped component record: name, exact version/commit, upstream URL, license/SPDX identifier, binary SHA-256, build flags, patches, source archive location, notices, and dynamic/static linkage.
+Use only Qt modules whose selected license permits the intended distribution. For LGPL Qt components, dynamically link and fulfill applicable notices, source, relinking and reverse-engineering requirements.
 
 ## Release gate
-No release artifact may be labeled commercially redistributable until a human-reviewed dependency audit confirms all shipped binaries and obligations.
+No commercial release until the exact shipped binaries and fulfillment of all license obligations have been reviewed.
