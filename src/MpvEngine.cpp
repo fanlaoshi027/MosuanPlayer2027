@@ -102,6 +102,11 @@ bool MpvEngine::getDoubleProperty(const char *name, double *value) const {
 
 bool MpvEngine::setShader(const QString &shaderPath) {
     if (!m_handle) return false;
+    if (shaderPath.isEmpty()) {
+        const char *args[] = {"change-list", "glsl-shaders", "clr", nullptr};
+        return m_command(m_handle, args) >= 0;
+    }
     const QByteArray path = shaderPath.toUtf8();
-    return m_setPropertyString(m_handle, "glsl-shaders", path.constData()) >= 0;
+    const char *args[] = {"change-list", "glsl-shaders", "set", path.constData(), nullptr};
+    return m_command(m_handle, args) >= 0;
 }

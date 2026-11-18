@@ -39,20 +39,59 @@ public:
     explicit ClickableSlider(Qt::Orientation orientation, QWidget *parent = nullptr)
         : QSlider(orientation, parent) {}
 protected:
+    int valueAt(const QPoint &point) const
+    {
+        QStyleOptionSlider option;
+        initStyleOption(&option);
+        const QRect groove = style()->subControlRect(
+            QStyle::CC_Slider, &option, QStyle::SC_SliderGroove, this);
+        const QRect handle = style()->subControlRect(
+            QStyle::CC_Slider, &option, QStyle::SC_SliderHandle, this);
+        const int sliderLength = orientation() == Qt::Horizontal
+            ? handle.width() : handle.height();
+        const int sliderMin = orientation() == Qt::Horizontal
+            ? groove.x() : groove.y();
+        const int sliderMax = sliderMin
+            + (orientation() == Qt::Horizontal ? groove.width() : groove.height())
+            - sliderLength;
+        const int position = orientation() == Qt::Horizontal
+            ? point.x() - sliderLength / 2 : point.y() - sliderLength / 2;
+        return QStyle::sliderValueFromPosition(
+            minimum(), maximum(), position - sliderMin,
+            qMax(1, sliderMax - sliderMin), option.upsideDown);
+    }
     void mousePressEvent(QMouseEvent *event) override
     {
-        if (event->button() == Qt::LeftButton) {
-            QStyleOptionSlider option;
-            initStyleOption(&option);
-            const int position = (orientation() == Qt::Horizontal)
-                ? event->position().toPoint().x() : event->position().toPoint().y();
-            const int span = (orientation() == Qt::Horizontal) ? width() : height();
-            const int value = QStyle::sliderValueFromPosition(minimum(), maximum(),
-                position, qMax(1, span), option.upsideDown);
-            setValue(value);
-            event->accept();
+        if (event->button() != Qt::LeftButton) {
+            QSlider::mousePressEvent(event);
+            return;
         }
-        QSlider::mousePressEvent(event);
+        setSliderPosition(valueAt(event->position().toPoint()));
+        setSliderDown(true);
+        emit sliderMoved(sliderPosition());
+        event->accept();
+    }
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (isSliderDown()) {
+            setSliderPosition(valueAt(event->position().toPoint()));
+            emit sliderMoved(sliderPosition());
+            event->accept();
+            return;
+        }
+        QSlider::mouseMoveEvent(event);
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton && isSliderDown()) {
+            setSliderPosition(valueAt(event->position().toPoint()));
+            setSliderDown(false);
+            setValue(sliderPosition());
+            emit sliderReleased();
+            event->accept();
+            return;
+        }
+        QSlider::mouseReleaseEvent(event);
     }
 };
 struct FolderScanResult {
