@@ -14,6 +14,8 @@ qt_add_executable(MosuanPlayer
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.h
+    src/MpvEngine.cpp
+    src/MpvEngine.h
 )
 
 target_link_libraries(MosuanPlayer PRIVATE Qt6::Widgets Qt6::Concurrent)
