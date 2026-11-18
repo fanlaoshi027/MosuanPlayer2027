@@ -630,17 +630,17 @@ void MainWindow::applyInvertShader()
     const QColor bg(m_invertBackground);
     if (!bg.isValid()) return;
     const QString shader = QStringLiteral(
-        "//!HOOK OUTPUT\\n"
-        "//!BIND HOOKED\\n"
-        "//!DESC Mosuan simple GPU inversion\\n"
-        "vec4 hook() {\\n"
-        "    vec4 color = HOOKED_tex(HOOKED_pos);\\n"
-        "    float whiteMask = smoothstep(0.90, 0.995, min(min(color.r, color.g), color.b));\\n"
-        "    vec3 inverted = vec3(1.0) - color.rgb;\\n"
-        "    vec3 background = vec3(%1, %2, %3);\\n"
-        "    color.rgb = mix(inverted, background, whiteMask);\\n"
-        "    return color;\\n"
-        "}\\n")
+        "//!HOOK OUTPUT\n"
+        "//!BIND HOOKED\n"
+        "//!DESC Mosuan simple GPU inversion\n"
+        "vec4 hook() {\n"
+        "    vec4 color = HOOKED_tex(HOOKED_pos);\n"
+        "    float whiteMask = smoothstep(0.90, 0.995, min(min(color.r, color.g), color.b));\n"
+        "    vec3 inverted = vec3(1.0) - color.rgb;\n"
+        "    vec3 background = vec3(%1, %2, %3);\n"
+        "    color.rgb = mix(inverted, background, whiteMask);\n"
+        "    return color;\n"
+        "}\n")
         .arg(bg.redF(), 0, 'f', 6)
         .arg(bg.greenF(), 0, 'f', 6)
         .arg(bg.blueF(), 0, 'f', 6);
