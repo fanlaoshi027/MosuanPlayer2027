@@ -2,7 +2,10 @@
 
 #include <QMainWindow>
 
+class QListWidget;
 class QLabel;
+class QToolButton;
+class QSlider;
 
 class MainWindow final : public QMainWindow
 {
@@ -12,5 +15,15 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
 
 private:
-    QLabel *m_statusLabel = nullptr;
+    void buildUi();
+    QWidget *createSidebar();
+    QWidget *createVideoArea();
+    QWidget *createControlBar();
+
+    QListWidget *m_playlist1 = nullptr;
+    QListWidget *m_playlist2 = nullptr;
+    QListWidget *m_favorites = nullptr;
+    QLabel *m_videoPlaceholder = nullptr;
+    QLabel *m_currentFile = nullptr;
+    QSlider *m_progress = nullptr;
 };
