@@ -12,7 +12,7 @@ jobs:
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
-      - name: Install Qt 6 (LGPL-eligible modules only)
+      - name: Install Qt 6
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
@@ -25,3 +25,19 @@ jobs:
         run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
       - name: Build
         run: cmake --build build --config Release --parallel
+      - name: Prepare portable package
+        shell: pwsh
+        run: |
+          $exe = "build/Release/MosuanPlayer.exe"
+          if (!(Test-Path $exe)) { throw "Build output not found: $exe" }
+          New-Item -ItemType Directory -Force -Path "package" | Out-Null
+          Copy-Item $exe "package/"
+          windeployqt --release --no-translations "package/MosuanPlayer.exe"
+          Compress-Archive -Path "package/*" -DestinationPath "MosuanPlayer2027-Windows-x64.zip" -Force
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: MosuanPlayer2027-Windows-x64
+          path: MosuanPlayer2027-Windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
