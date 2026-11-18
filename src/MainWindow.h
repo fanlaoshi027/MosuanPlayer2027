@@ -59,6 +59,7 @@ private:
     int m_cropRight = 0;
     int m_cropTop = 0;
     int m_cropBottom = 0;
+    bool m_cropApplyPending = false;
     QString m_currentPath;
     QString m_currentPath;
     bool m_invertEnabled = false;

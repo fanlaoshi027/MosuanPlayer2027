@@ -626,7 +626,7 @@ void MainWindow::playFile(const QString &path)
     m_cropRight = cropSettings.value(cropPrefix + QStringLiteral("/right"), 0).toInt();
     m_cropTop = cropSettings.value(cropPrefix + QStringLiteral("/top"), 0).toInt();
     m_cropBottom = cropSettings.value(cropPrefix + QStringLiteral("/bottom"), 0).toInt();
-    applyVideoCrop();
+    m_cropApplyPending = !applyVideoCrop();
     if (m_invertEnabled) applyInvertShader();
     m_autoAdvanceTriggered = false;
     m_speedButton->setText(QStringLiteral("1.0×"));
@@ -660,6 +660,8 @@ void MainWindow::updatePlaybackStatus()
         m_progress->setValue(value);
     }
     m_timeLabel->setText(formatTime(position) + QStringLiteral(" / ") + formatTime(duration));
+    if (m_cropApplyPending && applyVideoCrop())
+        m_cropApplyPending = false;
 
     if (!m_paused && position >= duration - 0.45 && !m_autoAdvanceTriggered) {
         m_autoAdvanceTriggered = true;
