@@ -8,6 +8,7 @@ class QLabel;
 class QPushButton;
 class QSlider;
 class QWidget;
+class QTimer;
 class MpvEngine;
 
 class MainWindow final : public QMainWindow
@@ -23,6 +24,9 @@ private:
     QWidget *createVideoArea();
     QWidget *createControlBar();
     void playFile(const QString &path);
+    void updatePlaybackStatus();
+    void playAdjacent(int offset);
+    QString formatTime(double seconds) const;
 
     QListWidget *m_playlist1 = nullptr;
     QListWidget *m_playlist2 = nullptr;
@@ -40,4 +44,11 @@ private:
     double m_speed = 1.0;
     QLabel *m_currentFile = nullptr;
     QSlider *m_progress = nullptr;
+    QSlider *m_volumeSlider = nullptr;
+    QLabel *m_timeLabel = nullptr;
+    QTimer *m_statusTimer = nullptr;
+    QListWidget *m_activePlaylist = nullptr;
+    int m_activeRow = -1;
+    bool m_seeking = false;
+    bool m_autoAdvanceTriggered = false;
 };
