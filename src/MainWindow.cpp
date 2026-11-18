@@ -530,10 +530,16 @@ QWidget *MainWindow::createControlBar()
             m_cropTop = topCrop->value();
             m_cropBottom = bottomCrop->value();
             QString error;
-            if (!applyVideoCrop(&error))
-                QMessageBox::warning(this, QStringLiteral("裁切未应用"), error);
-            else
+            if (!applyVideoCrop(&error)) {
+                if (error.contains(QStringLiteral("尚未读取到视频原始分辨率"))) {
+                    m_cropApplyPending = true;
+                } else {
+                    QMessageBox::warning(this, QStringLiteral("裁切未应用"), error);
+                }
+            } else {
+                m_cropApplyPending = false;
                 saveVideoCrop();
+            }
         };
         connect(left, &QSlider::valueChanged, this, [applyFromDialog](int) { applyFromDialog(); });
         connect(right, &QSlider::valueChanged, this, [applyFromDialog](int) { applyFromDialog(); });
@@ -621,7 +627,6 @@ void MainWindow::playFile(const QString &path)
         QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex();
     QSettings cropSettings;
     const QString cropPrefix = QStringLiteral("video/crop/") + QString::fromLatin1(pathKey);
-    m_currentPath = QFileInfo(path).absoluteFilePath();
     m_cropLeft = cropSettings.value(cropPrefix + QStringLiteral("/left"), 0).toInt();
     m_cropRight = cropSettings.value(cropPrefix + QStringLiteral("/right"), 0).toInt();
     m_cropTop = cropSettings.value(cropPrefix + QStringLiteral("/top"), 0).toInt();
