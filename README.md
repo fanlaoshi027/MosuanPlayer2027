@@ -16,7 +16,7 @@ Windows-first teaching video player. Proprietary application code; third-party d
 - Distribution target: closed-source app with an audited LGPL media runtime. Keep corresponding source, notices, build metadata and replaceability obligations with each release.
 
 ## Implemented
-- GPU GLSL inversion implementation is present, but runtime shader compilation and visual correctness still require Windows hardware verification.
+- GPU GLSL inversion implementation is present; runtime shader compilation and visual correctness still require Windows hardware verification.
 - Inversion toggle and persistent background presets: 90% gray-black, charcoal, deep blue and deep green; runtime behavior remains unverified.
 - Native Windows video surface and libmpv embedding.
 - Double-click playback from either playlist.
@@ -25,11 +25,11 @@ Windows-first teaching video player. Proprietary application code; third-party d
 - Volume slider.
 - Previous/next playlist navigation and automatic next-item playback at end of file.
 - Folder-backed playlists, favorites and SMB startup/manual refresh contract.
-- Basic video zoom and horizontal/vertical pan controls through mpv video-zoom/video-pan-x/video-pan-y properties; this is zoom-and-reposition, not a true arbitrary rectangle crop.
+- Four-edge source-video crop using mpv's video-crop option, with independent left/right/top/bottom percentages and per-file persistent settings. Crop restoration is deferred until decoded source dimensions become available.
 
 ## Not yet implemented
 - Camera exclusion rectangle with independent dimming.
-- Interactive rectangular crop selection and per-video crop presets (not yet implemented).
+- Mouse-drag rectangular crop selection on the video surface (not yet implemented; current crop uses four percentage sliders).
 - Fullscreen mode and configurable hotkeys.
 - Resume position persistence and playlist queue behavior.
 - Automated runtime playback tests on physical Windows hardware.
