@@ -9,6 +9,7 @@ class QPushButton;
 class QSlider;
 class QWidget;
 class QTimer;
+class QMenu;
 class MpvEngine;
 
 class MainWindow final : public QMainWindow
@@ -27,6 +28,7 @@ private:
     void updatePlaybackStatus();
     void playAdjacent(int offset);
     QString formatTime(double seconds) const;
+    void applyInvertShader();
 
     QListWidget *m_playlist1 = nullptr;
     QListWidget *m_playlist2 = nullptr;
@@ -51,4 +53,7 @@ private:
     int m_activeRow = -1;
     bool m_seeking = false;
     bool m_autoAdvanceTriggered = false;
+    bool m_invertEnabled = false;
+    QString m_invertBackground = QStringLiteral("#191919");
+    QPushButton *m_invertButton = nullptr;
 };
