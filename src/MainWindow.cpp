@@ -29,6 +29,7 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <QColor>
+#include <QCryptographicHash>
 #include <QDialog>
 #include <QFormLayout>
 #include <QDialogButtonBox>
@@ -156,9 +157,7 @@ MainWindow::MainWindow(QWidget *parent)
     QSettings settings;
     m_invertEnabled = settings.value(QStringLiteral("video/invertEnabled"), false).toBool();
     m_invertBackground = settings.value(QStringLiteral("video/invertBackground"), QStringLiteral("#191919")).toString();
-    m_cropZoom = settings.value(QStringLiteral("video/cropZoom"), 0.0).toDouble();
-    m_cropPanX = settings.value(QStringLiteral("video/cropPanX"), 0.0).toDouble();
-    m_cropPanY = settings.value(QStringLiteral("video/cropPanY"), 0.0).toDouble();
+
     if (m_invertButton)
         m_invertButton->setText(m_invertEnabled ? QStringLiteral("反色：开") : QStringLiteral("反色：关"));
 }
@@ -527,17 +526,17 @@ QWidget *MainWindow::createControlBar()
         connect(zoom, &QSlider::valueChanged, this, [this](int v) {
             m_cropZoom = v / 10.0;
             m_mpv->setPropertyString("video-zoom", QString::number(m_cropZoom, 'f', 2));
-            QSettings().setValue(QStringLiteral("video/cropZoom"), m_cropZoom);
+            QSettings().setValue(QStringLiteral("video/crop/") + QString::fromLatin1(QCryptographicHash::hash(QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex()) + QStringLiteral("/zoom"), m_cropZoom);
         });
         connect(horizontal, &QSlider::valueChanged, this, [this](int v) {
             m_cropPanX = v / 100.0;
             m_mpv->setPropertyString("video-pan-x", QString::number(m_cropPanX, 'f', 2));
-            QSettings().setValue(QStringLiteral("video/cropPanX"), m_cropPanX);
+            QSettings().setValue(QStringLiteral("video/crop/") + QString::fromLatin1(QCryptographicHash::hash(QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex()) + QStringLiteral("/panX"), m_cropPanX);
         });
         connect(vertical, &QSlider::valueChanged, this, [this](int v) {
             m_cropPanY = v / 100.0;
             m_mpv->setPropertyString("video-pan-y", QString::number(m_cropPanY, 'f', 2));
-            QSettings().setValue(QStringLiteral("video/cropPanY"), m_cropPanY);
+            QSettings().setValue(QStringLiteral("video/crop/") + QString::fromLatin1(QCryptographicHash::hash(QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex()) + QStringLiteral("/panY"), m_cropPanY);
         });
         connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
         connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -614,6 +613,14 @@ void MainWindow::playFile(const QString &path)
     m_speed = 1.0;
     m_mpv->setSpeed(m_speed);
     m_mpv->setVolume(m_volumeSlider ? m_volumeSlider->value() : 80);
+    m_currentPath = QFileInfo(path).absoluteFilePath();
+    const QByteArray pathKey = QCryptographicHash::hash(
+        QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex();
+    QSettings cropSettings;
+    const QString cropPrefix = QStringLiteral("video/crop/") + QString::fromLatin1(pathKey);
+    m_cropZoom = cropSettings.value(cropPrefix + QStringLiteral("/zoom"), 0.0).toDouble();
+    m_cropPanX = cropSettings.value(cropPrefix + QStringLiteral("/panX"), 0.0).toDouble();
+    m_cropPanY = cropSettings.value(cropPrefix + QStringLiteral("/panY"), 0.0).toDouble();
     m_mpv->setPropertyString("video-zoom", QString::number(m_cropZoom, 'f', 2));
     m_mpv->setPropertyString("video-pan-x", QString::number(m_cropPanX, 'f', 2));
     m_mpv->setPropertyString("video-pan-y", QString::number(m_cropPanY, 'f', 2));

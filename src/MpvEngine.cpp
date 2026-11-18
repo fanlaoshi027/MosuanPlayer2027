@@ -43,7 +43,7 @@ bool MpvEngine::initialize(WId nativeWindow, QString *errorMessage) {
         if (errorMessage) *errorMessage = QStringLiteral("mpv_create 创建播放实例失败。");
         return false;
     }
-    const QByteArray wid = QByteArray::number(static_cast<qulonglong>(nativeWindow));
+    const QByteArray wid = QByteArray::number(static_cast<qulonglong>(reinterpret_cast<quintptr>(nativeWindow)));
     const auto option = [this](const char *key, const char *value) {
         return m_setOptionString(m_handle, key, value) >= 0;
     };

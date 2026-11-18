@@ -56,6 +56,7 @@ private:
     double m_cropZoom = 0.0;
     double m_cropPanX = 0.0;
     double m_cropPanY = 0.0;
+    QString m_currentPath;
     bool m_invertEnabled = false;
     QString m_invertBackground = QStringLiteral("#191919");
     QPushButton *m_invertButton = nullptr;
