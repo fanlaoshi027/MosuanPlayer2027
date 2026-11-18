@@ -53,6 +53,9 @@ private:
     int m_activeRow = -1;
     bool m_seeking = false;
     bool m_autoAdvanceTriggered = false;
+    double m_cropZoom = 0.0;
+    double m_cropPanX = 0.0;
+    double m_cropPanY = 0.0;
     bool m_invertEnabled = false;
     QString m_invertBackground = QStringLiteral("#191919");
     QPushButton *m_invertButton = nullptr;

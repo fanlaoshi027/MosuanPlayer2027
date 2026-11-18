@@ -16,6 +16,7 @@ public:
     bool setSpeed(double speed);
     bool setVolume(double volume);
     bool setShader(const QString &shaderPath);
+    bool setPropertyString(const char *name, const QString &value);
     bool seek(double seconds);
     bool getDoubleProperty(const char *name, double *value) const;
     bool isReady() const noexcept { return m_handle != nullptr; }

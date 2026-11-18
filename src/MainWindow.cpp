@@ -29,6 +29,9 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <QColor>
+#include <QDialog>
+#include <QFormLayout>
+#include <QDialogButtonBox>
 
 #include <algorithm>
 
@@ -155,6 +158,9 @@ MainWindow::MainWindow(QWidget *parent)
     QSettings settings;
     m_invertEnabled = settings.value(QStringLiteral("video/invertEnabled"), false).toBool();
     m_invertBackground = settings.value(QStringLiteral("video/invertBackground"), QStringLiteral("#191919")).toString();
+    m_cropZoom = settings.value(QStringLiteral("video/cropZoom"), 0.0).toDouble();
+    m_cropPanX = settings.value(QStringLiteral("video/cropPanX"), 0.0).toDouble();
+    m_cropPanY = settings.value(QStringLiteral("video/cropPanY"), 0.0).toDouble();
     if (m_invertButton)
         m_invertButton->setText(m_invertEnabled ? QStringLiteral("反色：开") : QStringLiteral("反色：关"));
 }
@@ -493,9 +499,57 @@ QWidget *MainWindow::createControlBar()
     }
     backgroundButton->setMenu(backgroundMenu);
     top->addWidget(backgroundButton);
-    auto *crop = new QPushButton(QStringLiteral("裁切"), bar);
-    crop->setToolTip(QStringLiteral("画面裁切（后续接入）"));
+    auto *crop = new QPushButton(QStringLiteral("画面裁切"), bar);
+    crop->setToolTip(QStringLiteral("调整画面放大比例及可视区域位置"));
     top->addWidget(crop);
+    connect(crop, &QPushButton::clicked, this, [this]() {
+        if (!m_mpv || !m_mpv->isReady()) {
+            QMessageBox::information(this, QStringLiteral("画面裁切"),
+                QStringLiteral("请先开始播放视频，再调整画面。"));
+            return;
+        }
+        QDialog dialog(this);
+        dialog.setWindowTitle(QStringLiteral("画面裁切与定位"));
+        dialog.setMinimumWidth(360);
+        auto *form = new QFormLayout(&dialog);
+        auto *zoom = new QSlider(Qt::Horizontal, &dialog);
+        zoom->setRange(0, 20);
+        zoom->setValue(qBound(0, qRound(m_cropZoom * 10.0), 20));
+        auto *horizontal = new QSlider(Qt::Horizontal, &dialog);
+        horizontal->setRange(-100, 100);
+        horizontal->setValue(qBound(-100, qRound(m_cropPanX * 100.0), 100));
+        auto *vertical = new QSlider(Qt::Horizontal, &dialog);
+        vertical->setRange(-100, 100);
+        vertical->setValue(qBound(-100, qRound(m_cropPanY * 100.0), 100));
+        form->addRow(QStringLiteral("放大程度"), zoom);
+        form->addRow(QStringLiteral("水平位置"), horizontal);
+        form->addRow(QStringLiteral("垂直位置"), vertical);
+        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Reset | QDialogButtonBox::Close, &dialog);
+        form->addRow(buttons);
+        connect(zoom, &QSlider::valueChanged, this, [this](int v) {
+            m_cropZoom = v / 10.0;
+            m_mpv->setPropertyString("video-zoom", QString::number(m_cropZoom, 'f', 2));
+            QSettings().setValue(QStringLiteral("video/cropZoom"), m_cropZoom);
+        });
+        connect(horizontal, &QSlider::valueChanged, this, [this](int v) {
+            m_cropPanX = v / 100.0;
+            m_mpv->setPropertyString("video-pan-x", QString::number(m_cropPanX, 'f', 2));
+            QSettings().setValue(QStringLiteral("video/cropPanX"), m_cropPanX);
+        });
+        connect(vertical, &QSlider::valueChanged, this, [this](int v) {
+            m_cropPanY = v / 100.0;
+            m_mpv->setPropertyString("video-pan-y", QString::number(m_cropPanY, 'f', 2));
+            QSettings().setValue(QStringLiteral("video/cropPanY"), m_cropPanY);
+        });
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons->button(QDialogButtonBox::Reset), &QPushButton::clicked, &dialog, [&, this]() {
+            zoom->setValue(0);
+            horizontal->setValue(0);
+            vertical->setValue(0);
+        });
+        dialog.exec();
+    });
     layout->addLayout(top);
 
     auto *timeRow = new QHBoxLayout;
@@ -562,6 +616,9 @@ void MainWindow::playFile(const QString &path)
     m_speed = 1.0;
     m_mpv->setSpeed(m_speed);
     m_mpv->setVolume(m_volumeSlider ? m_volumeSlider->value() : 80);
+    m_mpv->setPropertyString("video-zoom", QString::number(m_cropZoom, 'f', 2));
+    m_mpv->setPropertyString("video-pan-x", QString::number(m_cropPanX, 'f', 2));
+    m_mpv->setPropertyString("video-pan-y", QString::number(m_cropPanY, 'f', 2));
     if (m_invertEnabled) applyInvertShader();
     m_autoAdvanceTriggered = false;
     m_speedButton->setText(QStringLiteral("1.0×"));

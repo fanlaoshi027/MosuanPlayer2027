@@ -110,3 +110,9 @@ bool MpvEngine::setShader(const QString &shaderPath) {
     const char *args[] = {"change-list", "glsl-shaders", "set", path.constData(), nullptr};
     return m_command(m_handle, args) >= 0;
 }
+
+bool MpvEngine::setPropertyString(const char *name, const QString &value) {
+    if (!m_handle || !name) return false;
+    const QByteArray utf8 = value.toUtf8();
+    return m_setPropertyString(m_handle, name, utf8.constData()) >= 0;
+}
