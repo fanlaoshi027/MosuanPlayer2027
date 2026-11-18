@@ -16,6 +16,8 @@ Windows-first teaching video player. Proprietary application code; third-party d
 - Distribution target: closed-source app with an audited LGPL media runtime. Keep corresponding source, notices, build metadata and replaceability obligations with each release.
 
 ## Implemented
+- Single-pass GPU GLSL inversion at mpv's OUTPUT stage; no CPU frame readback or resampling is introduced by the inversion pass.
+- Inversion toggle and persistent background presets: 90% gray-black, charcoal, deep blue and deep green. Near-white source pixels are smoothly mapped to the selected dark background to keep the board readable.
 - Native Windows video surface and libmpv embedding.
 - Double-click playback from either playlist.
 - Pause/resume and speed presets 1.0x, 1.25x, 1.5x, 1.75x and 2.0x.
@@ -25,7 +27,7 @@ Windows-first teaching video player. Proprietary application code; third-party d
 - Folder-backed playlists, favorites and SMB startup/manual refresh contract.
 
 ## Not yet implemented
-- GPU inversion shader and camera exclusion/dimming.
+- Camera exclusion rectangle with independent dimming.
 - Crop UI and persistent crop presets.
 - Fullscreen mode and configurable hotkeys.
 - Resume position persistence and playlist queue behavior.
