@@ -21,6 +21,8 @@
 #include <QWidget>
 #include <QMessageBox>
 #include <QTimer>
+#include <QMouseEvent>
+#include <QStyleOptionSlider>
 #include <QMenu>
 #include <QAction>
 #include <QFile>
@@ -31,6 +33,28 @@
 #include <algorithm>
 
 namespace {
+class ClickableSlider final : public QSlider
+{
+public:
+    explicit ClickableSlider(Qt::Orientation orientation, QWidget *parent = nullptr)
+        : QSlider(orientation, parent) {}
+protected:
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() == Qt::LeftButton) {
+            QStyleOptionSlider option;
+            initStyleOption(&option);
+            const int position = (orientation() == Qt::Horizontal)
+                ? event->position().toPoint().x() : event->position().toPoint().y();
+            const int span = (orientation() == Qt::Horizontal) ? width() : height();
+            const int value = QStyle::sliderValueFromPosition(minimum(), maximum(),
+                position, qMax(1, span), option.upsideDown);
+            setValue(value);
+            event->accept();
+        }
+        QSlider::mousePressEvent(event);
+    }
+};
 struct FolderScanResult {
     bool success = false;
     QStringList files;
@@ -155,7 +179,9 @@ QWidget *MainWindow::createSidebar()
 
     auto makePlaylistPanel = [this, layout, sidebar](const QString &title, int index,
                                                        QListWidget **outList) {
-        layout->addWidget(sectionTitle(title, sidebar));
+        auto *titleLabel = sectionTitle(title, sidebar);
+        titleLabel->setContextMenuPolicy(Qt::CustomContextMenu);
+        layout->addWidget(titleLabel);
 
         auto *pathLabel = new QLabel(QStringLiteral("尚未指定文件夹"), sidebar);
         pathLabel->setObjectName(QStringLiteral("pathLabel"));
@@ -164,10 +190,8 @@ QWidget *MainWindow::createSidebar()
 
         auto *buttons = new QHBoxLayout;
         auto *choose = new QPushButton(QStringLiteral("选择文件夹"), sidebar);
-        auto *refresh = new QPushButton(QStringLiteral("手动刷新"), sidebar);
         auto *favorite = new QPushButton(QStringLiteral("收藏"), sidebar);
         buttons->addWidget(choose);
-        buttons->addWidget(refresh);
         buttons->addWidget(favorite);
         layout->addLayout(buttons);
 
@@ -176,13 +200,10 @@ QWidget *MainWindow::createSidebar()
         layout->addWidget(list, 1);
         *outList = list;
 
-        if (index == 1) {
+        if (index == 1)
             m_playlist1PathLabel = pathLabel;
-            m_playlist1RefreshButton = refresh;
-        } else {
+        else
             m_playlist2PathLabel = pathLabel;
-            m_playlist2RefreshButton = refresh;
-        }
 
         QSettings settings;
         const QString pathKey = QStringLiteral("playlist%1/path").arg(index);
@@ -206,16 +227,13 @@ QWidget *MainWindow::createSidebar()
                 return;
             }
 
-            refresh->setEnabled(false);
-            refresh->setText(QStringLiteral("扫描中…"));
+            pathLabel->setText(folder + QStringLiteral("  [正在刷新…]"));
 
             auto *watcher = new QFutureWatcher<FolderScanResult>(this);
             connect(watcher, &QFutureWatcher<FolderScanResult>::finished, this,
-                [watcher, index, list, pathLabel, refresh, folder]() {
+                [watcher, index, list, pathLabel, folder]() {
                     const FolderScanResult result = watcher->result();
                     watcher->deleteLater();
-                    refresh->setEnabled(true);
-                    refresh->setText(QStringLiteral("手动刷新"));
 
                     if (!result.success) {
                         pathLabel->setText(folder + QStringLiteral("  [不可用；保留上次列表]"));
@@ -271,7 +289,14 @@ QWidget *MainWindow::createSidebar()
                 QStringLiteral("playlist%1/snapshot").arg(index)).toStringList());
         });
 
-        connect(refresh, &QPushButton::clicked, this, scan);
+        // Refresh is intentionally available from the playlist title context menu only.
+        connect(titleLabel, &QWidget::customContextMenuRequested, this,
+            [titleLabel, scan](const QPoint &position) {
+                QMenu menu(titleLabel);
+                QAction *refreshAction = menu.addAction(QStringLiteral("刷新此播放列表"));
+                if (QAction *chosen = menu.exec(titleLabel->mapToGlobal(position)); chosen == refreshAction)
+                    scan();
+            });
 
         connect(favorite, &QPushButton::clicked, this, [this, index]() {
             QSettings currentSettings;
@@ -439,9 +464,9 @@ QWidget *MainWindow::createControlBar()
     m_timeLabel = new QLabel(QStringLiteral("00:00 / 00:00"), bar);
     m_timeLabel->setMinimumWidth(110);
     timeRow->addWidget(m_timeLabel);
-    m_progress = new QSlider(Qt::Horizontal, bar);
+    m_progress = new ClickableSlider(Qt::Horizontal, bar);
     m_progress->setRange(0, 1000);
-    m_progress->setTracking(false);
+    m_progress->setTracking(true);
     timeRow->addWidget(m_progress, 1);
     layout->addLayout(timeRow);
     connect(m_progress, &QSlider::sliderPressed, this, [this]() { m_seeking = true; });
