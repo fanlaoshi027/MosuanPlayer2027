@@ -16,19 +16,20 @@ Windows-first teaching video player. Proprietary application code; third-party d
 - Distribution target: closed-source app with an audited LGPL media runtime. Keep corresponding source, notices, build metadata and replaceability obligations with each release.
 
 ## Implemented
-- Single-pass GPU GLSL inversion at mpv's OUTPUT stage; no CPU frame readback or resampling is introduced by the inversion pass.
-- Inversion toggle and persistent background presets: 90% gray-black, charcoal, deep blue and deep green. Near-white source pixels are smoothly mapped to the selected dark background to keep the board readable.
+- GPU GLSL inversion implementation is present, but runtime shader compilation and visual correctness still require Windows hardware verification.
+- Inversion toggle and persistent background presets: 90% gray-black, charcoal, deep blue and deep green; runtime behavior remains unverified.
 - Native Windows video surface and libmpv embedding.
 - Double-click playback from either playlist.
 - Pause/resume and speed presets 1.0x, 1.25x, 1.5x, 1.75x and 2.0x.
-- Playback position/duration polling, seek slider and elapsed/total time.
+- Playback position/duration polling and timeline seeking implementation; click/drag behavior requires Windows regression testing.
 - Volume slider.
 - Previous/next playlist navigation and automatic next-item playback at end of file.
 - Folder-backed playlists, favorites and SMB startup/manual refresh contract.
+- Basic video zoom and horizontal/vertical pan controls through mpv video-zoom/video-pan-x/video-pan-y properties; this is zoom-and-reposition, not a true arbitrary rectangle crop.
 
 ## Not yet implemented
 - Camera exclusion rectangle with independent dimming.
-- Crop UI and persistent crop presets.
+- Interactive rectangular crop selection and per-video crop presets (not yet implemented).
 - Fullscreen mode and configurable hotkeys.
 - Resume position persistence and playlist queue behavior.
 - Automated runtime playback tests on physical Windows hardware.
