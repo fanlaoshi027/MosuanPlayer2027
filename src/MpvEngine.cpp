@@ -99,3 +99,9 @@ bool MpvEngine::getDoubleProperty(const char *name, double *value) const {
     // MPV_FORMAT_DOUBLE is 5 in libmpv's public C API.
     return m_getProperty(m_handle, name, 5, value) >= 0;
 }
+
+bool MpvEngine::setShader(const QString &shaderPath) {
+    if (!m_handle) return false;
+    const QByteArray path = shaderPath.toUtf8();
+    return m_setPropertyString(m_handle, "glsl-shaders", path.constData()) >= 0;
+}
