@@ -665,8 +665,10 @@ void MainWindow::updatePlaybackStatus()
         m_progress->setValue(value);
     }
     m_timeLabel->setText(formatTime(position) + QStringLiteral(" / ") + formatTime(duration));
-    if (m_cropApplyPending && applyVideoCrop())
+    if (m_cropApplyPending && applyVideoCrop()) {
         m_cropApplyPending = false;
+        saveVideoCrop();
+    }
 
     if (!m_paused && position >= duration - 0.45 && !m_autoAdvanceTriggered) {
         m_autoAdvanceTriggered = true;
