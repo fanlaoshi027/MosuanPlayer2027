@@ -3,29 +3,33 @@
 Windows-first teaching video player. Proprietary application code; third-party dependencies retain their own licenses.
 
 ## Product priorities
-1. Two independent folder-backed dynamic playlists.
-2. Folder favorites for fast navigation.
-3. SMB folders are scanned at application startup and only on explicit manual refresh; no periodic SMB polling or background watcher.
-4. Lightweight GPU video inversion, configurable inverted background, teacher-camera exclusion rectangle with optional dimming.
-5. Crop, playback speed, seek, volume, fullscreen and sequential playback.
-6. Later integration with MosuanLockdown via signed, ACL-protected policy.
+1. Two independent folder-backed dynamic playlists and folder favorites.
+2. SMB folders scan once at startup and only on manual refresh; no periodic polling or watcher.
+3. Smooth GPU video playback through dynamically loaded libmpv.
+4. Teaching-friendly inversion, configurable inverted background, camera exclusion rectangle and dimming.
+5. Crop, playback speed, timeline seek, volume, previous/next and sequential playback.
 
-## Chosen technology
+## Technology
 - C++20, Qt 6 Widgets, CMake, MSVC x64.
-- Playback engine: dynamically loaded libmpv (libmpv-2.dll).
-- Distribution target: closed-source application + audited LGPL-only libmpv build (-Dgpl=false) using an LGPL-only FFmpeg build.
-- Do not use the default GPL mpv build. Verify actual build flags, transitive dependencies, source correspondence, notices and replaceability for every release.
-- Qt modules must be individually checked for LGPL eligibility; avoid GPL-only Qt modules.
+- Playback: dynamically loaded libmpv-2.dll.
+- Pinned runtime: mpv v0.42.0 official x86_64-w64-mingw32 LGPL release asset, SHA-256 verified by CI.
+- Distribution target: closed-source app with an audited LGPL media runtime. Keep corresponding source, notices, build metadata and replaceability obligations with each release.
 
-## Playback integration status
-The code now contains a dynamic libmpv loader, native Windows video surface, playlist double-click playback, pause/resume and speed controls. The CI package currently does not include libmpv; playback requires an audited LGPL libmpv-2.dll beside the EXE. Missing DLLs are reported clearly. The next step is to pin, verify and package the exact LGPL binary and corresponding source bundle.
+## Implemented
+- Native Windows video surface and libmpv embedding.
+- Double-click playback from either playlist.
+- Pause/resume and speed presets 1.0x, 1.25x, 1.5x, 1.75x and 2.0x.
+- Playback position/duration polling, seek slider and elapsed/total time.
+- Volume slider.
+- Previous/next playlist navigation and automatic next-item playback at end of file.
+- Folder-backed playlists, favorites and SMB startup/manual refresh contract.
 
-## SMB refresh contract
-- Each configured SMB playlist is scanned once on application startup.
-- Manual Refresh triggers one scan.
-- No periodic polling, watcher, or automatic scan on playlist panel activation.
-- Playback itself never triggers a directory scan.
-- If SMB is unavailable, keep the last known list and show an offline/error state.
+## Not yet implemented
+- GPU inversion shader and camera exclusion/dimming.
+- Crop UI and persistent crop presets.
+- Fullscreen mode and configurable hotkeys.
+- Resume position persistence and playlist queue behavior.
+- Automated runtime playback tests on physical Windows hardware.
 
-## Status
-Prototype, not yet a distributable commercial release. See docs/LICENSING.md and docs/ROADMAP.md.
+## Build and licensing
+See `docs/LICENSING.md` and `docs/ADR-MEDIA-ENGINE.md`. The current CI artifact is a technical test build, not a commercially audited release. Verify the exact DLL dependency closure, source correspondence, notices and LGPL obligations before commercial distribution.
