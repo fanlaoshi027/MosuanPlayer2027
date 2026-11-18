@@ -4,7 +4,6 @@
 
 class QListWidget;
 class QLabel;
-class QToolButton;
 class QSlider;
 
 class MainWindow final : public QMainWindow
