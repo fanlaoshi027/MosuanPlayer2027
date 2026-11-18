@@ -252,10 +252,7 @@ QWidget *MainWindow::createSidebar()
                     return;
                 m_currentFile->setText(QFileInfo(file).fileName());
                 m_videoPlaceholder->setText(
-                    QStringLiteral("已选择视频
-%1
-
-下一阶段接入 FFmpeg 播放").arg(file));
+                    QStringLiteral("已选择视频\\n%1\\n\\n下一阶段接入 FFmpeg 播放").arg(file));
             });
 
         // Refresh saved folders once when the application starts, never on panel activation.
