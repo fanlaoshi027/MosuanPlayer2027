@@ -1,0 +1,15 @@
+/build/
+/out/
+/cmake-build-*/
+/.vs/
+/.idea/
+*.user
+*.suo
+*.pdb
+*.ilk
+*.obj
+*.lib
+*.dll
+*.exe
+*.log
+.DS_Store
