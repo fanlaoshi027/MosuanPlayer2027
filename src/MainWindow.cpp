@@ -1,4 +1,5 @@
 #include "MainWindow.h"
+#include "MpvEngine.h"
 
 #include <QCollator>
 #include <QFutureWatcher>
@@ -18,6 +19,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <QMessageBox>
 
 #include <algorithm>
 
@@ -76,6 +78,7 @@ MainWindow::MainWindow(QWidget *parent)
     resize(1280, 760);
     setMinimumSize(960, 600);
     buildUi();
+    m_mpv = new MpvEngine(this);
 }
 
 void MainWindow::buildUi()
@@ -277,9 +280,7 @@ QWidget *MainWindow::createSidebar()
                 const QString file = item->data(Qt::UserRole).toString();
                 if (file.isEmpty())
                     return;
-                m_currentFile->setText(QFileInfo(file).fileName());
-                m_videoPlaceholder->setText(
-                    QStringLiteral("已选择视频\\n%1\\n\\n下一阶段接入 FFmpeg 播放").arg(file));
+                playFile(file);
             });
 
         // Refresh saved folders once when the application starts, never on panel activation.
@@ -339,10 +340,15 @@ QWidget *MainWindow::createVideoArea()
     auto *videoLayout = new QVBoxLayout(videoFrame);
     videoLayout->setContentsMargins(0, 0, 0, 0);
 
-    m_videoPlaceholder = new QLabel(QStringLiteral("视频播放区域"), videoFrame);
+    m_videoSurface = new QWidget(videoFrame);
+    m_videoSurface->setAttribute(Qt::WA_NativeWindow, true);
+    auto *surfaceLayout = new QVBoxLayout(m_videoSurface);
+    surfaceLayout->setContentsMargins(0, 0, 0, 0);
+    m_videoPlaceholder = new QLabel(QStringLiteral("双击播放列表中的视频开始播放"), m_videoSurface);
     m_videoPlaceholder->setObjectName(QStringLiteral("videoPlaceholder"));
     m_videoPlaceholder->setAlignment(Qt::AlignCenter);
-    videoLayout->addWidget(m_videoPlaceholder);
+    surfaceLayout->addWidget(m_videoPlaceholder);
+    videoLayout->addWidget(m_videoSurface);
 
     layout->addWidget(videoFrame, 1);
     layout->addWidget(createControlBar());
@@ -365,9 +371,16 @@ QWidget *MainWindow::createControlBar()
     top->addWidget(m_currentFile);
     top->addStretch();
 
-    auto *speed = new QPushButton(QStringLiteral("1.0×"), bar);
-    speed->setToolTip(QStringLiteral("播放速度"));
-    top->addWidget(speed);
+    m_speedButton = new QPushButton(QStringLiteral("1.0×"), bar);
+    m_speedButton->setToolTip(QStringLiteral("循环切换播放速度"));
+    top->addWidget(m_speedButton);
+    connect(m_speedButton, &QPushButton::clicked, this, [this]() {
+        const QList<double> speeds = {1.0, 1.25, 1.5, 1.75, 2.0};
+        const int index = speeds.indexOf(m_speed);
+        m_speed = speeds.at((index + 1) % speeds.size());
+        m_speedButton->setText(QStringLiteral("%1×").arg(m_speed, 0, 'f', 2));
+        if (m_mpv && m_mpv->isReady()) m_mpv->setSpeed(m_speed);
+    });
     auto *invert = new QPushButton(QStringLiteral("反色"), bar);
     invert->setToolTip(QStringLiteral("视频反色（后续接入 GPU Shader）"));
     top->addWidget(invert);
@@ -382,7 +395,14 @@ QWidget *MainWindow::createControlBar()
 
     auto *bottom = new QHBoxLayout;
     bottom->addWidget(iconButton(QStyle::SP_MediaSkipBackward, QStringLiteral("上一个"), bar));
-    bottom->addWidget(iconButton(QStyle::SP_MediaPlay, QStringLiteral("播放/暂停"), bar));
+    m_playPauseButton = new QPushButton(QStringLiteral("播放/暂停"), bar);
+    bottom->addWidget(m_playPauseButton);
+    connect(m_playPauseButton, &QPushButton::clicked, this, [this]() {
+        if (!m_mpv || !m_mpv->isReady()) return;
+        m_paused = !m_paused;
+        m_mpv->setPaused(m_paused);
+        m_playPauseButton->setText(m_paused ? QStringLiteral("继续") : QStringLiteral("暂停"));
+    });
     bottom->addWidget(iconButton(QStyle::SP_MediaSkipForward, QStringLiteral("下一个"), bar));
     bottom->addStretch();
     bottom->addWidget(new QLabel(QStringLiteral("音量"), bar));
@@ -390,4 +410,24 @@ QWidget *MainWindow::createControlBar()
     bottom->addWidget(iconButton(QStyle::SP_TitleBarMaxButton, QStringLiteral("全屏"), bar));
     layout->addLayout(bottom);
     return bar;
+}
+
+void MainWindow::playFile(const QString &path)
+{
+    QString error;
+    if (!m_mpv->isReady() && !m_mpv->initialize(m_videoSurface->winId(), &error)) {
+        QMessageBox::warning(this, QStringLiteral("播放器引擎不可用"), error);
+        return;
+    }
+    if (!m_mpv->loadFile(path, &error)) {
+        QMessageBox::warning(this, QStringLiteral("播放失败"), error);
+        return;
+    }
+    m_paused = false;
+    m_speed = 1.0;
+    m_mpv->setSpeed(m_speed);
+    m_speedButton->setText(QStringLiteral("1.0×"));
+    m_currentFile->setText(QFileInfo(path).fileName());
+    m_videoPlaceholder->hide();
+    m_playPauseButton->setText(QStringLiteral("暂停"));
 }
