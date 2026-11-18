@@ -218,7 +218,7 @@ QWidget *MainWindow::createSidebar()
 
         // Explicit scan only. On startup this is called once for each configured playlist.
         // Merely selecting a playlist or opening its panel never triggers an SMB scan.
-        auto scan = [this, index, list, pathLabel, refresh]() {
+        auto scan = [this, index, list, pathLabel]() {
             QSettings currentSettings;
             const QString folder = currentSettings.value(
                 QStringLiteral("playlist%1/path").arg(index)).toString();

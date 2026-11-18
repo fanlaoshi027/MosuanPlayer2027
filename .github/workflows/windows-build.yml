@@ -1,10 +1,7 @@
 name: Windows build
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+  # Builds are intentionally manual so incremental code edits can be accumulated.
   workflow_dispatch:
 
 concurrency:
