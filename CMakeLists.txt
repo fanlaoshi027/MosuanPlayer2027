@@ -8,7 +8,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Concurrent)
 
 qt_add_executable(MosuanPlayer
     src/main.cpp
@@ -16,7 +16,7 @@ qt_add_executable(MosuanPlayer
     src/MainWindow.h
 )
 
-target_link_libraries(MosuanPlayer PRIVATE Qt6::Widgets)
+target_link_libraries(MosuanPlayer PRIVATE Qt6::Widgets Qt6::Concurrent)
 target_compile_definitions(MosuanPlayer PRIVATE QT_NO_CAST_FROM_ASCII QT_NO_CAST_TO_ASCII)
 
 if(MSVC)
