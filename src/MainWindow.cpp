@@ -421,10 +421,14 @@ QWidget *MainWindow::createSidebar()
             if (folder.isEmpty())
                 return;
 
-            currentSettings.setValue(QStringLiteral("playlist%1/path").arg(index), folder);
+            const QString pathKey = QStringLiteral("playlist%1/path").arg(index);
+            const QString snapshotKey = QStringLiteral("playlist%1/snapshot").arg(index);
+            const QString previousFolder = currentSettings.value(pathKey).toString();
+            currentSettings.setValue(pathKey, folder);
+            if (QDir::cleanPath(previousFolder) != QDir::cleanPath(folder))
+                currentSettings.remove(snapshotKey); // Never display the previous folder's stale file list.
             pathLabel->setText(folder + QStringLiteral("  [已指定；手动刷新或下次启动时扫描]"));
-            restoreSnapshot(list, currentSettings.value(
-                QStringLiteral("playlist%1/snapshot").arg(index)).toStringList());
+            restoreSnapshot(list, currentSettings.value(snapshotKey).toStringList());
         });
 
         // Refresh is intentionally available from the playlist title context menu only.
@@ -504,12 +508,17 @@ QWidget *MainWindow::createSidebar()
                 return;
 
             QSettings currentSettings;
-            currentSettings.setValue(QStringLiteral("playlist1/path"), folder);
+            const QString pathKey = QStringLiteral("playlist1/path");
+            const QString snapshotKey = QStringLiteral("playlist1/snapshot");
+            const QString previousFolder = currentSettings.value(pathKey).toString();
+            currentSettings.setValue(pathKey, folder);
+            if (QDir::cleanPath(previousFolder) != QDir::cleanPath(folder))
+                currentSettings.remove(snapshotKey); // Favorite navigation must not show another folder's cached items.
             if (m_playlist1PathLabel)
                 m_playlist1PathLabel->setText(
                     folder + QStringLiteral("  [已切换；不会自动扫描]"));
             restoreSnapshot(m_playlist1,
-                currentSettings.value(QStringLiteral("playlist1/snapshot")).toStringList());
+                currentSettings.value(snapshotKey).toStringList());
         });
 
     auto *hint = new QLabel(
