@@ -853,6 +853,7 @@ void MainWindow::playFile(const QString &path)
     m_mpv->setVolume(m_volumeSlider ? m_volumeSlider->value() : 80);
     m_currentPath = QFileInfo(path).absoluteFilePath();
     m_resumePosition = QSettings().value(resumeSettingsKey(m_currentPath), 0.0).toDouble();
+    m_resumeClearedForEnd = false;
     m_resumeApplyPending = m_resumePosition > 5.0;
     m_lastResumeSaveBucket = -1;
     const QByteArray pathKey = QCryptographicHash::hash(
@@ -915,6 +916,7 @@ void MainWindow::updatePlaybackStatus()
 
     if (!m_paused && position >= duration - 0.45 && !m_autoAdvanceTriggered) {
         m_resumePosition = 0.0;
+        m_resumeClearedForEnd = true;
         QSettings().setValue(resumeSettingsKey(m_currentPath), 0.0);
         m_autoAdvanceTriggered = true;
         playAdjacent(1);
@@ -1071,7 +1073,7 @@ QString MainWindow::resumeSettingsKey(const QString &path) const
 
 void MainWindow::saveResumePosition(bool force)
 {
-    if (!m_mpv || !m_mpv->isReady() || m_currentPath.isEmpty() || m_resumeApplyPending) return;
+    if (!m_mpv || !m_mpv->isReady() || m_currentPath.isEmpty() || m_resumeApplyPending || m_resumeClearedForEnd) return;
     double position = 0.0;
     if (!m_mpv->getDoubleProperty("time-pos", &position) || position < 0.0) return;
     const qint64 bucket = static_cast<qint64>(position / 5.0);

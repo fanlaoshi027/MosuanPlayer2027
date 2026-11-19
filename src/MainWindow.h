@@ -75,6 +75,7 @@ private:
     bool m_resumeApplyPending = false;
     double m_resumePosition = 0.0;
     qint64 m_lastResumeSaveBucket = -1;
+    bool m_resumeClearedForEnd = false;
     bool m_invertEnabled = false;
     QString m_invertBackground = QStringLiteral("#191919");
     QPushButton *m_invertButton = nullptr;
