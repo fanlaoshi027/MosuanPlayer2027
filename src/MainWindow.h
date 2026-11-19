@@ -34,6 +34,7 @@ private:
     void applyInvertShader();
     bool applyVideoCrop(QString *errorMessage = nullptr);
     void saveVideoCrop();
+    void populateFavorites();
 
     QListWidget *m_playlist1 = nullptr;
     QListWidget *m_playlist2 = nullptr;

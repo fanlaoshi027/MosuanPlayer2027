@@ -35,6 +35,8 @@
 #include <QFormLayout>
 #include <QDialogButtonBox>
 #include <QKeyEvent>
+#include <QDesktopServices>
+#include <QUrl>
 
 #include <algorithm>
 
@@ -353,9 +355,7 @@ QWidget *MainWindow::createSidebar()
             if (!favorites.contains(folder)) {
                 favorites.append(folder);
                 currentSettings.setValue(QStringLiteral("favorites"), favorites);
-                m_favorites->clear();
-                for (const QString &entry : favorites)
-                    m_favorites->addItem(entry);
+                populateFavorites();
             }
         });
 
@@ -382,12 +382,27 @@ QWidget *MainWindow::createSidebar()
     m_favorites->setMaximumHeight(125);
     layout->addWidget(m_favorites);
 
-    QSettings settings;
-    const QStringList favorites = settings.value(QStringLiteral("favorites")).toStringList();
-    for (const QString &folder : favorites)
-        m_favorites->addItem(folder);
-    if (m_favorites->count() == 0)
-        m_favorites->addItem(QStringLiteral("暂无收藏文件夹"));
+    populateFavorites();
+    m_favorites->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_favorites, &QListWidget::customContextMenuRequested, this,
+        [this](const QPoint &position) {
+            QListWidgetItem *item = m_favorites->itemAt(position);
+            if (!item || item->text() == QStringLiteral("暂无收藏文件夹")) return;
+            const QString folder = item->text();
+            QMenu menu(m_favorites);
+            QAction *openAction = menu.addAction(QStringLiteral("在资源管理器中打开"));
+            QAction *removeAction = menu.addAction(QStringLiteral("从收藏夹移除"));
+            QAction *chosen = menu.exec(m_favorites->mapToGlobal(position));
+            if (chosen == openAction) {
+                QDesktopServices::openUrl(QUrl::fromLocalFile(folder));
+            } else if (chosen == removeAction) {
+                QSettings settings;
+                QStringList favorites = settings.value(QStringLiteral("favorites")).toStringList();
+                favorites.removeAll(folder);
+                settings.setValue(QStringLiteral("favorites"), favorites);
+                populateFavorites();
+            }
+        });
 
     connect(m_favorites, &QListWidget::itemDoubleClicked, this,
         [this](QListWidgetItem *item) {
@@ -798,4 +813,15 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         event->accept(); return;
     }
     QMainWindow::keyPressEvent(event);
+}
+
+void MainWindow::populateFavorites()
+{
+    if (!m_favorites) return;
+    m_favorites->clear();
+    const QStringList favorites = QSettings().value(QStringLiteral("favorites")).toStringList();
+    for (const QString &folder : favorites)
+        m_favorites->addItem(folder);
+    if (m_favorites->count() == 0)
+        m_favorites->addItem(QStringLiteral("暂无收藏文件夹"));
 }
