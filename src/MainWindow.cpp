@@ -35,6 +35,8 @@
 #include <QSpinBox>
 #include <QKeyEvent>
 #include <QCloseEvent>
+#include <QPainter>
+#include <functional>
 #include <QDesktopServices>
 #include <QUrl>
 
@@ -110,6 +112,84 @@ const QStringList kVideoExtensions = {
     QStringLiteral("avi"), QStringLiteral("wmv"), QStringLiteral("flv"),
     QStringLiteral("webm"), QStringLiteral("m4v"), QStringLiteral("ts"),
     QStringLiteral("m2ts")
+};
+
+class CameraSelectionOverlay final : public QWidget
+{
+public:
+    explicit CameraSelectionOverlay(QWidget *parent = nullptr) : QWidget(parent)
+    {
+        setAttribute(Qt::WA_StyledBackground, false);
+        setCursor(Qt::CrossCursor);
+        hide();
+    }
+    void begin(std::function<void(const QRect &)> callback)
+    {
+        m_callback = std::move(callback);
+        m_dragging = false;
+        m_rect = {};
+        setGeometry(parentWidget()->rect());
+        raise();
+        show();
+        setFocus();
+    }
+protected:
+    void paintEvent(QPaintEvent *) override
+    {
+        QPainter painter(this);
+        painter.fillRect(rect(), QColor(0, 0, 0, 70));
+        if (!m_rect.isNull()) {
+            painter.setCompositionMode(QPainter::CompositionMode_Clear);
+            painter.fillRect(m_rect.normalized(), Qt::transparent);
+            painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+            QPen pen(QColor(255, 190, 40), 2, Qt::DashLine);
+            painter.setPen(pen);
+            painter.setBrush(Qt::NoBrush);
+            painter.drawRect(m_rect.normalized());
+        }
+        painter.setPen(Qt::white);
+        painter.drawText(QRect(12, 12, width() - 24, 30),
+            Qt::AlignLeft | Qt::AlignVCenter,
+            QStringLiteral("拖动鼠标框选老师头像区域，松开完成；按 Esc 取消"));
+    }
+    void mousePressEvent(QMouseEvent *event) override
+    {
+        if (event->button() != Qt::LeftButton) return;
+        m_start = event->position().toPoint();
+        m_rect = QRect(m_start, m_start);
+        m_dragging = true;
+        update();
+    }
+    void mouseMoveEvent(QMouseEvent *event) override
+    {
+        if (!m_dragging) return;
+        m_rect = QRect(m_start, event->position().toPoint()).normalized();
+        update();
+    }
+    void mouseReleaseEvent(QMouseEvent *event) override
+    {
+        if (event->button() != Qt::LeftButton || !m_dragging) return;
+        m_dragging = false;
+        m_rect = QRect(m_start, event->position().toPoint()).normalized();
+        const QRect selected = m_rect.intersected(rect());
+        if (selected.width() >= 8 && selected.height() >= 8 && m_callback)
+            m_callback(selected);
+        hide();
+    }
+    void keyPressEvent(QKeyEvent *event) override
+    {
+        if (event->key() == Qt::Key_Escape) {
+            hide();
+            event->accept();
+            return;
+        }
+        QWidget::keyPressEvent(event);
+    }
+private:
+    QPoint m_start;
+    QRect m_rect;
+    bool m_dragging = false;
+    std::function<void(const QRect &)> m_callback;
 };
 
 QLabel *sectionTitle(const QString &text, QWidget *parent)
