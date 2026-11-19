@@ -356,13 +356,22 @@ QWidget *MainWindow::createSidebar()
                 return;
             }
 
+            const quint64 scanGeneration = m_playlistScanGeneration.value(index, 0) + 1;
+            m_playlistScanGeneration.insert(index, scanGeneration);
             pathLabel->setText(folder + QStringLiteral("  [正在刷新…]"));
 
             auto *watcher = new QFutureWatcher<FolderScanResult>(this);
             connect(watcher, &QFutureWatcher<FolderScanResult>::finished, this,
-                [watcher, index, list, pathLabel, folder]() {
+                [this, watcher, index, list, pathLabel, folder, scanGeneration]() {
                     const FolderScanResult result = watcher->result();
                     watcher->deleteLater();
+
+                    const QString currentFolder = QSettings().value(
+                        QStringLiteral("playlist%1/path").arg(index)).toString();
+                    if (m_playlistScanGeneration.value(index) != scanGeneration
+                        || QDir::cleanPath(currentFolder) != QDir::cleanPath(folder)) {
+                        return; // Ignore stale results from an older scan or previously selected folder.
+                    }
 
                     if (!result.success) {
                         pathLabel->setText(folder + QStringLiteral("  [不可用；保留上次列表]"));

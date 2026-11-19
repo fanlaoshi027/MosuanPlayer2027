@@ -2,6 +2,7 @@
 
 #include <QMainWindow>
 #include <QString>
+#include <QHash>
 
 class QListWidget;
 class QLabel;
@@ -84,4 +85,5 @@ private:
     int m_cameraW = 25;
     int m_cameraH = 25;
     int m_cameraDim = 35;
+    QHash<int, quint64> m_playlistScanGeneration;
 };
