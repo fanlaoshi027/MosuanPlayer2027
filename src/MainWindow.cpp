@@ -4,7 +4,6 @@
 #include <QCollator>
 #include <QFutureWatcher>
 #include <QtConcurrent/QtConcurrentRun>
-#include <QDir>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
@@ -29,7 +28,6 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <QColor>
-#include <QCryptographicHash>
 #include <QCryptographicHash>
 #include <QDialog>
 #include <QFormLayout>

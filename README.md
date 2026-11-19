@@ -25,6 +25,7 @@ Windows-first teaching video player. Proprietary application code; third-party d
 - Volume slider.
 - Previous/next playlist navigation and automatic next-item playback at end of file.
 - Folder-backed playlists, favorites and SMB startup/manual refresh contract.
+- Favorites support right-click actions to open a folder in Windows Explorer or remove it from favorites.
 - Four-edge source-video crop using mpv's video-crop option, with independent left/right/top/bottom percentages and per-file persistent settings. Crop restoration is deferred until decoded source dimensions become available.
 
 ## Not yet implemented
