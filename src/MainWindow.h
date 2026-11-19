@@ -21,6 +21,7 @@ public:
     explicit MainWindow(QWidget *parent = nullptr);
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+    void closeEvent(QCloseEvent *event) override;
 
 private:
     void buildUi();
@@ -35,6 +36,8 @@ private:
     bool applyVideoCrop(QString *errorMessage = nullptr);
     void saveVideoCrop();
     void populateFavorites();
+    QString resumeSettingsKey(const QString &path) const;
+    void saveResumePosition(bool force = false);
 
     QListWidget *m_playlist1 = nullptr;
     QListWidget *m_playlist2 = nullptr;
@@ -65,6 +68,9 @@ private:
     int m_cropBottom = 0;
     bool m_cropApplyPending = false;
     QString m_currentPath;
+    bool m_resumeApplyPending = false;
+    double m_resumePosition = 0.0;
+    qint64 m_lastResumeSaveBucket = -1;
     bool m_invertEnabled = false;
     QString m_invertBackground = QStringLiteral("#191919");
     QPushButton *m_invertButton = nullptr;

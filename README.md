@@ -32,7 +32,7 @@ Windows-first teaching video player. Proprietary application code; third-party d
 - Camera exclusion rectangle with independent dimming.
 - Mouse-drag rectangular crop selection on the video surface (not yet implemented; current crop uses four percentage sliders).
 - Window fullscreen toggle with F11 and Escape exit shortcuts; configurable hotkeys remain unimplemented.
-- Resume position persistence and playlist queue behavior.
+- Playlist queue behavior. Per-video resume position is now saved periodically and restored on reopen.
 - Automated runtime playback tests on physical Windows hardware.
 
 ## Build and licensing

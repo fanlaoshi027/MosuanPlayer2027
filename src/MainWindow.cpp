@@ -33,6 +33,7 @@
 #include <QFormLayout>
 #include <QDialogButtonBox>
 #include <QKeyEvent>
+#include <QCloseEvent>
 #include <QDesktopServices>
 #include <QUrl>
 
@@ -641,6 +642,9 @@ void MainWindow::playFile(const QString &path)
     m_mpv->setSpeed(m_speed);
     m_mpv->setVolume(m_volumeSlider ? m_volumeSlider->value() : 80);
     m_currentPath = QFileInfo(path).absoluteFilePath();
+    m_resumePosition = QSettings().value(resumeSettingsKey(m_currentPath), 0.0).toDouble();
+    m_resumeApplyPending = m_resumePosition > 5.0;
+    m_lastResumeSaveBucket = -1;
     const QByteArray pathKey = QCryptographicHash::hash(
         QDir::toNativeSeparators(m_currentPath).toUtf8(), QCryptographicHash::Sha256).toHex();
     QSettings cropSettings;
@@ -683,12 +687,22 @@ void MainWindow::updatePlaybackStatus()
         m_progress->setValue(value);
     }
     m_timeLabel->setText(formatTime(position) + QStringLiteral(" / ") + formatTime(duration));
+    if (m_resumeApplyPending) {
+        m_resumeApplyPending = false;
+        if (m_resumePosition < duration - 5.0 && m_resumePosition > 5.0)
+            m_mpv->seek(m_resumePosition);
+        else
+            m_resumePosition = 0.0;
+    }
+    saveResumePosition(false);
     if (m_cropApplyPending && applyVideoCrop()) {
         m_cropApplyPending = false;
         saveVideoCrop();
     }
 
     if (!m_paused && position >= duration - 0.45 && !m_autoAdvanceTriggered) {
+        m_resumePosition = 0.0;
+        QSettings().setValue(resumeSettingsKey(m_currentPath), 0.0);
         m_autoAdvanceTriggered = true;
         playAdjacent(1);
     }
@@ -822,4 +836,30 @@ void MainWindow::populateFavorites()
         m_favorites->addItem(folder);
     if (m_favorites->count() == 0)
         m_favorites->addItem(QStringLiteral("暂无收藏文件夹"));
+}
+
+QString MainWindow::resumeSettingsKey(const QString &path) const
+{
+    const QString normalized = QDir::cleanPath(QDir::toNativeSeparators(QFileInfo(path).absoluteFilePath())).toCaseFolded();
+    const QByteArray key = QCryptographicHash::hash(normalized.toUtf8(), QCryptographicHash::Sha256).toHex();
+    return QStringLiteral("video/resume/") + QString::fromLatin1(key);
+}
+
+void MainWindow::saveResumePosition(bool force)
+{
+    if (!m_mpv || !m_mpv->isReady() || m_currentPath.isEmpty() || m_resumeApplyPending) return;
+    double position = 0.0;
+    if (!m_mpv->getDoubleProperty("time-pos", &position) || position < 0.0) return;
+    const qint64 bucket = static_cast<qint64>(position / 5.0);
+    if (!force && bucket == m_lastResumeSaveBucket) return;
+    QSettings settings;
+    settings.setValue(resumeSettingsKey(m_currentPath), position);
+    m_lastResumeSaveBucket = bucket;
+    m_resumePosition = position;
+}
+
+void MainWindow::closeEvent(QCloseEvent *event)
+{
+    saveResumePosition(true);
+    QMainWindow::closeEvent(event);
 }
