@@ -628,7 +628,7 @@ QWidget *MainWindow::createControlBar()
 
 void MainWindow::playFile(const QString &path)
 {
-    if (!m_currentPath.isEmpty() && QFileInfo(m_currentPath).absoluteFilePath() != QFileInfo(path).absoluteFilePath())
+    if (!m_currentPath.isEmpty())
         saveResumePosition(true);
     QString error;
     if (!m_mpv->isReady() && !m_mpv->initialize(m_videoSurface->winId(), &error)) {
