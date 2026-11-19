@@ -12,6 +12,7 @@ class QTimer;
 class QMenu;
 class MpvEngine;
 class QKeyEvent;
+class QCloseEvent;
 
 class MainWindow final : public QMainWindow
 {
