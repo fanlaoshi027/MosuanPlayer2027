@@ -689,10 +689,12 @@ void MainWindow::updatePlaybackStatus()
     m_timeLabel->setText(formatTime(position) + QStringLiteral(" / ") + formatTime(duration));
     if (m_resumeApplyPending) {
         m_resumeApplyPending = false;
-        if (m_resumePosition < duration - 5.0 && m_resumePosition > 5.0)
+        if (m_resumePosition < duration - 5.0 && m_resumePosition > 5.0) {
             m_mpv->seek(m_resumePosition);
-        else
-            m_resumePosition = 0.0;
+            return; // Do not overwrite the saved position with the pre-seek timestamp.
+        }
+        m_resumePosition = 0.0;
+        QSettings().setValue(resumeSettingsKey(m_currentPath), 0.0);
     }
     saveResumePosition(false);
     if (m_cropApplyPending && applyVideoCrop()) {
