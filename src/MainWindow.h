@@ -66,6 +66,9 @@ private:
     QListWidget *m_activePlaylist = nullptr;
     int m_activeRow = -1;
     bool m_seeking = false;
+    bool m_seekPending = false;
+    double m_seekTarget = 0.0;
+    int m_seekPendingTicks = 0;
     bool m_autoAdvanceTriggered = false;
     int m_cropLeft = 0;
     int m_cropRight = 0;

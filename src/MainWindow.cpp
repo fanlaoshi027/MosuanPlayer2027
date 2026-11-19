@@ -812,8 +812,13 @@ QWidget *MainWindow::createControlBar()
     connect(m_progress, &QSlider::sliderReleased, this, [this]() {
         if (m_mpv && m_mpv->isReady()) {
             double duration = 0.0;
-            if (m_mpv->getDoubleProperty("duration", &duration) && duration > 0.0)
-                m_mpv->seek(duration * m_progress->value() / 1000.0);
+            if (m_mpv->getDoubleProperty("duration", &duration) && duration > 0.0) {
+                m_seekTarget = duration * m_progress->value() / 1000.0;
+                if (m_mpv->seek(m_seekTarget)) {
+                    m_seekPending = true;
+                    m_seekPendingTicks = 40;
+                }
+            }
         }
         m_seeking = false;
     });
@@ -912,7 +917,12 @@ void MainWindow::updatePlaybackStatus()
     const bool hasDuration = m_mpv->getDoubleProperty("duration", &duration);
     if (!hasPosition || !hasDuration || duration <= 0.0) return;
 
-    if (!m_seeking) {
+    if (m_seekPending) {
+        const double tolerance = qMax(1.5, duration * 0.002);
+        if (qAbs(position - m_seekTarget) <= tolerance || --m_seekPendingTicks <= 0)
+            m_seekPending = false;
+    }
+    if (!m_seeking && !m_seekPending) {
         const int value = qBound(0, static_cast<int>((position / duration) * 1000.0), 1000);
         m_progress->setValue(value);
     }
@@ -920,13 +930,18 @@ void MainWindow::updatePlaybackStatus()
     if (m_resumeApplyPending) {
         m_resumeApplyPending = false;
         if (m_resumePosition < duration - 5.0 && m_resumePosition > 5.0) {
-            m_mpv->seek(m_resumePosition);
+            m_seekTarget = m_resumePosition;
+            if (m_mpv->seek(m_seekTarget)) {
+                m_seekPending = true;
+                m_seekPendingTicks = 40;
+            }
             return; // Do not overwrite the saved position with the pre-seek timestamp.
         }
         m_resumePosition = 0.0;
         QSettings().setValue(resumeSettingsKey(m_currentPath), 0.0);
     }
-    saveResumePosition(false);
+    if (!m_seekPending && !m_seeking)
+        saveResumePosition(false);
     if (m_cropApplyPending && applyVideoCrop()) {
         m_cropApplyPending = false;
         saveVideoCrop();
