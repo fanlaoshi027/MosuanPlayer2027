@@ -124,9 +124,11 @@ public:
         setCursor(Qt::CrossCursor);
         hide();
     }
-    void begin(std::function<void(const QRect &)> callback)
+    void begin(std::function<void(const QRect &)> callback,
+               const QString &instruction = QStringLiteral("拖动鼠标框选老师头像区域，松开完成；按 Esc 取消"))
     {
         m_callback = std::move(callback);
+        m_instruction = instruction;
         m_dragging = false;
         m_rect = {};
         setGeometry(parentWidget()->rect());
@@ -151,7 +153,7 @@ protected:
         painter.setPen(Qt::white);
         painter.drawText(QRect(12, 12, width() - 24, 30),
             Qt::AlignLeft | Qt::AlignVCenter,
-            QStringLiteral("拖动鼠标框选老师头像区域，松开完成；按 Esc 取消"));
+            m_instruction);
     }
     void mousePressEvent(QMouseEvent *event) override
     {
@@ -191,6 +193,7 @@ private:
     QRect m_rect;
     bool m_dragging = false;
     std::function<void(const QRect &)> m_callback;
+    QString m_instruction;
 };
 
 QLabel *sectionTitle(const QString &text, QWidget *parent)
@@ -680,6 +683,13 @@ QWidget *MainWindow::createControlBar()
         form->addRow(QStringLiteral("右侧裁掉 (%)"), right);
         form->addRow(QStringLiteral("顶部裁掉 (%)"), topCrop);
         form->addRow(QStringLiteral("底部裁掉 (%)"), bottomCrop);
+        bool selectCropOnVideo = false;
+        auto *selectCropButton = new QPushButton(QStringLiteral("在画面上框选裁切区域…"), &dialog);
+        form->addRow(selectCropButton);
+        connect(selectCropButton, &QPushButton::clicked, &dialog, [&]() {
+            selectCropOnVideo = true;
+            dialog.accept();
+        });
         auto applyFromDialog = [this, left, right, topCrop, bottomCrop]() {
             m_cropLeft = left->value();
             m_cropRight = right->value();
@@ -711,6 +721,63 @@ QWidget *MainWindow::createControlBar()
         });
         connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
         dialog.exec();
+        if (selectCropOnVideo && m_cameraOverlay) {
+            qint64 sourceWidth = 0;
+            qint64 sourceHeight = 0;
+            if (!m_mpv->getInt64Property("width", &sourceWidth)
+                || !m_mpv->getInt64Property("height", &sourceHeight)
+                || sourceWidth <= 0 || sourceHeight <= 0) {
+                QMessageBox::warning(this, QStringLiteral("无法框选裁切"),
+                    QStringLiteral("尚未读取到视频分辨率，请稍后重试。"));
+                return;
+            }
+            const int surfaceWidth = qMax(1, m_videoSurface->width());
+            const int surfaceHeight = qMax(1, m_videoSurface->height());
+            const double visibleWidth = sourceWidth * (100 - m_cropLeft - m_cropRight) / 100.0;
+            const double visibleHeight = sourceHeight * (100 - m_cropTop - m_cropBottom) / 100.0;
+            const double aspect = visibleWidth / visibleHeight;
+            int displayWidth = surfaceWidth;
+            int displayHeight = qRound(displayWidth / aspect);
+            if (displayHeight > surfaceHeight) {
+                displayHeight = surfaceHeight;
+                displayWidth = qRound(displayHeight * aspect);
+            }
+            const QRect displayRect((surfaceWidth - displayWidth) / 2,
+                                    (surfaceHeight - displayHeight) / 2,
+                                    displayWidth, displayHeight);
+            static_cast<CameraSelectionOverlay *>(m_cameraOverlay)->begin(
+                [this, displayRect, sourceWidth, sourceHeight](const QRect &selection) {
+                    const QRect clipped = selection.intersected(displayRect);
+                    if (clipped.width() < 8 || clipped.height() < 8) return;
+                    const double x1 = qBound(0.0, (clipped.left() - displayRect.left()) / double(displayRect.width()), 1.0);
+                    const double x2 = qBound(0.0, (clipped.right() + 1 - displayRect.left()) / double(displayRect.width()), 1.0);
+                    const double y1 = qBound(0.0, (clipped.top() - displayRect.top()) / double(displayRect.height()), 1.0);
+                    const double y2 = qBound(0.0, (clipped.bottom() + 1 - displayRect.top()) / double(displayRect.height()), 1.0);
+                    const int oldLeft = m_cropLeft;
+                    const int oldRight = m_cropRight;
+                    const int oldTop = m_cropTop;
+                    const int oldBottom = m_cropBottom;
+                    const int availableWidth = 100 - oldLeft - oldRight;
+                    const int availableHeight = 100 - oldTop - oldBottom;
+                    m_cropLeft = qBound(0, oldLeft + qRound(x1 * availableWidth), 89);
+                    m_cropRight = qBound(0, oldRight + qRound((1.0 - x2) * availableWidth), 89);
+                    m_cropTop = qBound(0, oldTop + qRound(y1 * availableHeight), 89);
+                    m_cropBottom = qBound(0, oldBottom + qRound((1.0 - y2) * availableHeight), 89);
+                    if (m_cropLeft + m_cropRight >= 90 || m_cropTop + m_cropBottom >= 90) {
+                        m_cropLeft = oldLeft; m_cropRight = oldRight;
+                        m_cropTop = oldTop; m_cropBottom = oldBottom;
+                        return;
+                    }
+                    QString error;
+                    if (applyVideoCrop(&error)) {
+                        m_cropApplyPending = false;
+                        saveVideoCrop();
+                    } else {
+                        QMessageBox::warning(this, QStringLiteral("裁切未应用"), error);
+                    }
+                },
+                QStringLiteral("拖动鼠标框选要保留的画面区域，松开完成；按 Esc 取消"));
+        }
     });
     layout->addLayout(top);
 

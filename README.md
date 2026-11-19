@@ -30,7 +30,7 @@ Windows-first teaching video player. Proprietary application code; third-party d
 
 ## Not yet implemented
 - Camera protection rectangle integrated into the inversion shader, with per-video position/size and dimming settings; UI supports direct mouse-drag selection plus percentage fine-tuning. Native Windows overlay behavior still requires runtime verification.
-- Mouse-drag rectangular crop selection on the video surface (not yet implemented; current crop uses four percentage sliders).
+- Mouse-drag crop selection is wired into the crop dialog, maps the selection against the displayed video rectangle (excluding letterbox bars), composes with an existing crop, and persists per-video settings; Windows runtime verification remains pending.
 - Window fullscreen toggle with F11 and Escape exit shortcuts; configurable hotkeys remain unimplemented.
 - Playlist queue behavior. Per-video resume position is now saved periodically and restored on reopen.
 - Automated runtime playback tests on physical Windows hardware.
