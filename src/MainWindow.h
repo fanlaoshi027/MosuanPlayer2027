@@ -36,6 +36,8 @@ private:
     void applyInvertShader();
     bool applyVideoCrop(QString *errorMessage = nullptr);
     void saveVideoCrop();
+    void loadCameraProtection();
+    void saveCameraProtection();
     void populateFavorites();
     QString resumeSettingsKey(const QString &path) const;
     void saveResumePosition(bool force = false);
@@ -75,4 +77,9 @@ private:
     bool m_invertEnabled = false;
     QString m_invertBackground = QStringLiteral("#191919");
     QPushButton *m_invertButton = nullptr;
+    int m_cameraX = 70;
+    int m_cameraY = 70;
+    int m_cameraW = 25;
+    int m_cameraH = 25;
+    int m_cameraDim = 35;
 };

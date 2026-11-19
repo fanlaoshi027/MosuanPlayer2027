@@ -32,6 +32,7 @@
 #include <QDialog>
 #include <QFormLayout>
 #include <QDialogButtonBox>
+#include <QSpinBox>
 #include <QKeyEvent>
 #include <QCloseEvent>
 #include <QDesktopServices>
@@ -512,6 +513,45 @@ QWidget *MainWindow::createControlBar()
     }
     backgroundButton->setMenu(backgroundMenu);
     top->addWidget(backgroundButton);
+    auto *cameraButton = new QPushButton(QStringLiteral("头像保护"), bar);
+    cameraButton->setToolTip(QStringLiteral("设置视频画面中老师头像的保护区域"));
+    top->addWidget(cameraButton);
+    connect(cameraButton, &QPushButton::clicked, this, [this]() {
+        QDialog dialog(this);
+        dialog.setWindowTitle(QStringLiteral("头像保护区域"));
+        dialog.setMinimumWidth(380);
+        auto *form = new QFormLayout(&dialog);
+        auto makeSpin = [&dialog](int value, int maximum) {
+            auto *spin = new QSpinBox(&dialog);
+            spin->setRange(0, maximum);
+            spin->setSuffix(QStringLiteral("%"));
+            spin->setValue(value);
+            return spin;
+        };
+        auto *x = makeSpin(m_cameraX, 100);
+        auto *y = makeSpin(m_cameraY, 100);
+        auto *w = makeSpin(m_cameraW, 100);
+        auto *h = makeSpin(m_cameraH, 100);
+        auto *dim = makeSpin(m_cameraDim, 100);
+        form->addRow(QStringLiteral("区域左边缘"), x);
+        form->addRow(QStringLiteral("区域上边缘"), y);
+        form->addRow(QStringLiteral("区域宽度"), w);
+        form->addRow(QStringLiteral("区域高度"), h);
+        form->addRow(QStringLiteral("区域亮度（0=全黑，100=原亮度）"), dim);
+        auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        form->addRow(buttons);
+        connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+        connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+        if (dialog.exec() != QDialog::Accepted) return;
+        m_cameraX = qMin(x->value(), 100 - w->value());
+        m_cameraY = qMin(y->value(), 100 - h->value());
+        m_cameraW = w->value();
+        m_cameraH = h->value();
+        m_cameraDim = dim->value();
+        saveCameraProtection();
+        applyInvertShader();
+    });
+
     auto *crop = new QPushButton(QStringLiteral("画面裁切"), bar);
     crop->setToolTip(QStringLiteral("调整画面放大比例及可视区域位置"));
     top->addWidget(crop);
@@ -656,6 +696,7 @@ void MainWindow::playFile(const QString &path)
     m_cropTop = cropSettings.value(cropPrefix + QStringLiteral("/top"), 0).toInt();
     m_cropBottom = cropSettings.value(cropPrefix + QStringLiteral("/bottom"), 0).toInt();
     m_cropApplyPending = !applyVideoCrop();
+    loadCameraProtection();
     if (m_invertEnabled) applyInvertShader();
     m_autoAdvanceTriggered = false;
     m_speedButton->setText(QStringLiteral("1.0×"));
@@ -748,12 +789,23 @@ void MainWindow::applyInvertShader()
         "    float whiteMask = smoothstep(0.90, 0.995, min(min(color.r, color.g), color.b));\n"
         "    vec3 inverted = vec3(1.0) - color.rgb;\n"
         "    vec3 background = vec3(%1, %2, %3);\n"
-        "    color.rgb = mix(inverted, background, whiteMask);\n"
+        "    vec2 p = HOOKED_pos;\n"
+        "    vec2 cameraMin = vec2(%4, %5);\n"
+        "    vec2 cameraMax = cameraMin + vec2(%6, %7);\n"
+        "    float inCamera = step(cameraMin.x, p.x) * step(cameraMin.y, p.y) * step(p.x, cameraMax.x) * step(p.y, cameraMax.y);\n"
+        "    vec3 protectedColor = color.rgb * %8;\n"
+        "    vec3 normalColor = mix(inverted, background, whiteMask);\n"
+        "    color.rgb = mix(normalColor, protectedColor, inCamera);\n"
         "    return color;\n"
         "}\n")
         .arg(bg.redF(), 0, 'f', 6)
         .arg(bg.greenF(), 0, 'f', 6)
-        .arg(bg.blueF(), 0, 'f', 6);
+        .arg(bg.blueF(), 0, 'f', 6)
+        .arg(m_cameraX / 100.0, 0, 'f', 4)
+        .arg(m_cameraY / 100.0, 0, 'f', 4)
+        .arg(m_cameraW / 100.0, 0, 'f', 4)
+        .arg(m_cameraH / 100.0, 0, 'f', 4)
+        .arg(m_cameraDim / 100.0, 0, 'f', 4);
 
     const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     if (appData.isEmpty() || !QDir().mkpath(appData)) return;
@@ -866,4 +918,33 @@ void MainWindow::closeEvent(QCloseEvent *event)
 {
     saveResumePosition(true);
     QMainWindow::closeEvent(event);
+}
+
+void MainWindow::loadCameraProtection()
+{
+    if (m_currentPath.isEmpty()) return;
+    const QString key = resumeSettingsKey(m_currentPath);
+    QSettings settings;
+    m_cameraX = settings.value(key + QStringLiteral("/cameraX"), 70).toInt();
+    m_cameraY = settings.value(key + QStringLiteral("/cameraY"), 70).toInt();
+    m_cameraW = settings.value(key + QStringLiteral("/cameraW"), 25).toInt();
+    m_cameraH = settings.value(key + QStringLiteral("/cameraH"), 25).toInt();
+    m_cameraDim = settings.value(key + QStringLiteral("/cameraDim"), 35).toInt();
+    m_cameraX = qBound(0, m_cameraX, 100);
+    m_cameraY = qBound(0, m_cameraY, 100);
+    m_cameraW = qBound(0, m_cameraW, 100 - m_cameraX);
+    m_cameraH = qBound(0, m_cameraH, 100 - m_cameraY);
+    m_cameraDim = qBound(0, m_cameraDim, 100);
+}
+
+void MainWindow::saveCameraProtection()
+{
+    if (m_currentPath.isEmpty()) return;
+    const QString key = resumeSettingsKey(m_currentPath);
+    QSettings settings;
+    settings.setValue(key + QStringLiteral("/cameraX"), m_cameraX);
+    settings.setValue(key + QStringLiteral("/cameraY"), m_cameraY);
+    settings.setValue(key + QStringLiteral("/cameraW"), m_cameraW);
+    settings.setValue(key + QStringLiteral("/cameraH"), m_cameraH);
+    settings.setValue(key + QStringLiteral("/cameraDim"), m_cameraDim);
 }
