@@ -120,6 +120,7 @@ public:
     explicit CameraSelectionOverlay(QWidget *parent = nullptr) : QWidget(parent)
     {
         setAttribute(Qt::WA_StyledBackground, false);
+        setAttribute(Qt::WA_NativeWindow, true);
         setCursor(Qt::CrossCursor);
         hide();
     }
@@ -529,6 +530,7 @@ QWidget *MainWindow::createVideoArea()
     m_videoPlaceholder->setObjectName(QStringLiteral("videoPlaceholder"));
     m_videoPlaceholder->setAlignment(Qt::AlignCenter);
     surfaceLayout->addWidget(m_videoPlaceholder);
+    m_cameraOverlay = new CameraSelectionOverlay(m_videoSurface);
     videoLayout->addWidget(m_videoSurface);
 
     layout->addWidget(videoFrame, 1);
@@ -618,8 +620,15 @@ QWidget *MainWindow::createControlBar()
         form->addRow(QStringLiteral("区域宽度"), w);
         form->addRow(QStringLiteral("区域高度"), h);
         form->addRow(QStringLiteral("区域亮度（0=全黑，100=原亮度）"), dim);
+        bool selectOnVideo = false;
         auto *buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+        auto *selectButton = new QPushButton(QStringLiteral("在画面上框选…"), &dialog);
+        buttons->addButton(selectButton, QDialogButtonBox::ActionRole);
         form->addRow(buttons);
+        connect(selectButton, &QPushButton::clicked, &dialog, [&]() {
+            selectOnVideo = true;
+            dialog.accept();
+        });
         connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
         connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
         if (dialog.exec() != QDialog::Accepted) return;
@@ -630,6 +639,18 @@ QWidget *MainWindow::createControlBar()
         m_cameraDim = dim->value();
         saveCameraProtection();
         applyInvertShader();
+        if (selectOnVideo && m_cameraOverlay) {
+            m_cameraOverlay->begin([this](const QRect &selected) {
+                const int surfaceWidth = qMax(1, m_videoSurface->width());
+                const int surfaceHeight = qMax(1, m_videoSurface->height());
+                m_cameraX = qBound(0, selected.x() * 100 / surfaceWidth, 100);
+                m_cameraY = qBound(0, selected.y() * 100 / surfaceHeight, 100);
+                m_cameraW = qBound(0, selected.width() * 100 / surfaceWidth, 100 - m_cameraX);
+                m_cameraH = qBound(0, selected.height() * 100 / surfaceHeight, 100 - m_cameraY);
+                saveCameraProtection();
+                applyInvertShader();
+            });
+        }
     });
 
     auto *crop = new QPushButton(QStringLiteral("画面裁切"), bar);
