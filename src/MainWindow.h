@@ -13,7 +13,6 @@ class QMenu;
 class MpvEngine;
 class QKeyEvent;
 class QCloseEvent;
-class CameraSelectionOverlay;
 
 class MainWindow final : public QMainWindow
 {
@@ -52,7 +51,7 @@ private:
     QPushButton *m_playlist2RefreshButton = nullptr;
     QLabel *m_videoPlaceholder = nullptr;
     QWidget *m_videoSurface = nullptr;
-    CameraSelectionOverlay *m_cameraOverlay = nullptr;
+    QWidget *m_cameraOverlay = nullptr;
     QPushButton *m_playPauseButton = nullptr;
     QPushButton *m_speedButton = nullptr;
     MpvEngine *m_mpv = nullptr;

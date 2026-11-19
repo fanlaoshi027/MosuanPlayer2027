@@ -640,7 +640,7 @@ QWidget *MainWindow::createControlBar()
         saveCameraProtection();
         applyInvertShader();
         if (selectOnVideo && m_cameraOverlay) {
-            m_cameraOverlay->begin([this](const QRect &selected) {
+            static_cast<CameraSelectionOverlay *>(m_cameraOverlay)->begin([this](const QRect &selected) {
                 const int surfaceWidth = qMax(1, m_videoSurface->width());
                 const int surfaceHeight = qMax(1, m_videoSurface->height());
                 m_cameraX = qBound(0, selected.x() * 100 / surfaceWidth, 100);

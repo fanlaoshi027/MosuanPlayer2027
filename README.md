@@ -29,7 +29,7 @@ Windows-first teaching video player. Proprietary application code; third-party d
 - Four-edge source-video crop using mpv's video-crop option, with independent left/right/top/bottom percentages and per-file persistent settings. Crop restoration is deferred until decoded source dimensions become available.
 
 ## Not yet implemented
-- Camera protection rectangle integrated into the inversion shader, with per-video position/size and dimming settings; the current UI uses percentage fields rather than direct mouse dragging.
+- Camera protection rectangle integrated into the inversion shader, with per-video position/size and dimming settings; the UI supports direct mouse-drag selection plus percentage fine-tuning; native Windows overlay behavior still requires runtime verification.
 - Mouse-drag rectangular crop selection on the video surface (not yet implemented; current crop uses four percentage sliders).
 - Window fullscreen toggle with F11 and Escape exit shortcuts; configurable hotkeys remain unimplemented.
 - Playlist queue behavior. Per-video resume position is now saved periodically and restored on reopen.
